@@ -1,7 +1,7 @@
 [project]
 name = "cable-management"
 description = "ComfyUI has spaghetti issues. Cable management for the node graph: daisy-chained links, PCB-style routing, ribbon cables, and proper right-to-left wrapping support."
-version = "1.0.0"
+version = "1.0.1"
 license = { file = "LICENSE" }
 
 [project.urls]
@@ -10,3 +10,5 @@ Repository = "https://github.com/vtokic/comfyui-cable-management"
 [tool.comfy]
 PublisherId = "barney-tearspell"
 DisplayName = "Cable Management for ComfyUI"
+Icon = "https://raw.githubusercontent.com/vtokic/comfyui-cable-management/master/docs/icon.png"
+Banner = "https://raw.githubusercontent.com/vtokic/comfyui-cable-management/master/docs/banner.png"
