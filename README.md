@@ -10,6 +10,9 @@ routing, ribbon cables, and proper right-to-left wrapping support.
 Built entirely from core ComfyUI primitives -- remove the extension and every
 workflow made with it still loads and runs.
 
+Early release. Expect bugs; criticism and praise equally welcome. Requires a
+recent ComfyUI (tested on 0.28-0.30, frontend 1.47-1.48) with Nodes 2.0.
+
 **Install Extension**
 
 - ComfyUI Manager: search `Cable Management`, install, restart ComfyUI.
