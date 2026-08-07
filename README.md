@@ -3,7 +3,7 @@
 ComfyUI has spaghetti issues. This frontend extension offers daisy-chaining, PCB
 routing, ribbon cables, and proper right-to-left wrapping support.
 
-![a real workflow, combed](docs/hero.png)
+![a real workflow, combed](https://raw.githubusercontent.com/vtokic/comfyui-cable-management/master/docs/hero.png)
 
 > "WTF IS THAT?????" -- _"a bunch of reroutes in a trenchcoat"_
 
