@@ -1,0 +1,16 @@
+{
+  "name": "harness",
+  "version": "1.0.0",
+  "description": "Playwright scripts (Node, not Bun -- Bun cannot launch Playwright on Windows) that drive a real browser against a running ComfyUI on 127.0.0.1:8188. Each is standalone:",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "playwright": "^1.62.1"
+  }
+}

@@ -1,0 +1,9 @@
+# Test harness dependencies and outputs -- the harness ships for contributors, its
+# node_modules and captures do not.
+harness/node_modules/
+harness/cablemanagement-screenshots/
+harness/*.png
+harness/*.log
+harness/battery-results*.txt
+__pycache__/
+WGIMCO-AUDIT.md
