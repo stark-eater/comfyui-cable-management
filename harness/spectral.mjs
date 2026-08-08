@@ -88,6 +88,11 @@ await page.evaluate(async () => {
 
 phase = 'settle'
 await page.waitForTimeout(2000)
+// Read the session's actual node mode before closing: the legacy boot canary
+// ("node modifications idle") is EXPECTED exactly when Vue nodes are off, and
+// stays a failure if it ever fires in a Vue session.
+const legacySession = await page.evaluate(
+  () => !document.querySelector('.lg-node') && !window.LiteGraph?.vueNodesMode)
 await b.close()
 
 // ---- attribution & report ----
@@ -118,8 +123,11 @@ for (const e of events.filter((e) => src(e) !== 'OURS' && ['warning', 'error', '
 }
 console.log(`\ntotal events: ${events.length}`)
 
-// battery mode: any warning/error/pageerror attributed to us fails the suite
+// battery mode: any warning/error/pageerror attributed to us fails the suite.
+// Exception: the deliberate legacy boot canary, expected iff the session is legacy.
+const expected = (e) =>
+  legacySession && e.kind === 'warning' && /node modifications idle/.test(e.text)
 const oursBad = events.filter(
-  (e) => src(e) === 'OURS' && ['warning', 'error', 'pageerror'].includes(e.kind))
+  (e) => src(e) === 'OURS' && ['warning', 'error', 'pageerror'].includes(e.kind) && !expected(e))
 console.log(oursBad.length === 0 ? 'PASS' : `FAIL (${oursBad.length} emissions of ours)`)
 process.exit(oursBad.length === 0 ? 0 : 1)

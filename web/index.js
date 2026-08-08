@@ -104,7 +104,7 @@ function sync() {
   if ((graph.nodes?.length ?? 0) > 0 && !document.querySelector(".lg-node")) {
     if (!warnedLegacy) {
       warnedLegacy = true;
-      console.warn("[cablemanagement] Vue nodes mode (Nodes 2.0) is off -- extension idle");
+      console.warn("[cablemanagement] Vue nodes mode (Nodes 2.0) is off -- node modifications idle; PCB routing and ribbons stay active");
     }
     return;
   }
@@ -381,13 +381,26 @@ app.registerExtension({
       // Deliberately filed next to Comfy.LinkRenderMode (LiteGraph > Graph), not under
       // a Cable Management section -- cable management controls belong together.
       category: ["LiteGraph", "Graph", "Cable Management"],
-      name: "Cable Management",
+      name: "Cable Management node features (req. Nodes 2.0)",
       tooltip:
         "Pass-through pins, collapsible input/output drawers, and the outputs-at-bottom " +
         'layout. "Off" returns nodes to stock rendering; hidden pass-through primitives ' +
-        "become ordinary visible nodes.",
+        "become ordinary visible nodes. Requires Nodes 2.0 (Modern Node Design); PCB " +
+        "routing and ribbons work without it.",
       type: "boolean",
       defaultValue: true,
+      // Grayed out -- not force-written -- in legacy sessions: the stored preference
+      // must survive a Nodes 2.0 round-trip, and the boot gate already no-ops the
+      // features regardless of the value. The getter runs each time the settings
+      // panel renders the row (FormItem spreads attrs), so the state is fresh on
+      // panel open; a mode flip while the dialog stays open won't re-gray until
+      // the row re-renders. Setting read, not .lg-node DOM: an empty graph has no
+      // node DOM in either mode.
+      attrs: {
+        get disabled() {
+          return app.extensionManager?.setting?.get("Comfy.VueNodes.Enabled") === false;
+        },
+      },
       onChange: (value) => {
         setEnabled(value !== false);
         isEnabled() ? start() : stop();

@@ -201,6 +201,30 @@ export function installGestures(app, active) {
         canvas.canvas.focus?.()
         return
       }
+      // Legacy (non-Vue) nodes are drawn ON the canvas element, so a node press
+      // arrives here instead of the node-DOM branch above. Same semantics: a press
+      // on a selected node arms the follow (gates ride the group drag core is
+      // about to run); an unselected node clears gate selection. Core owns the
+      // drag either way. Vue sessions never reach this: node presses target node
+      // DOM -- except over our visibility-hidden primitives, whose graph rects
+      // getNodeOnPos would still hit, so the probe is gated to legacy sessions.
+      const nodeHit = document.querySelector('.lg-node') ? null : g?.getNodeOnPos?.(x, y)
+      if (nodeHit) {
+        const refNode = [...(canvas?.selectedItems ?? [])].find((it) => it === nodeHit)
+        if (refNode) {
+          follow = {
+            refNode,
+            refPos: [refNode.pos[0], refNode.pos[1]],
+            gates: selectedGates(g).map((s) => ({ ...s, origin: [...s.comb[s.which].pos] }))
+          }
+          if (!follow.gates.length) follow = null
+        } else if (!e.shiftKey) {
+          clearGateSelection()
+          g?.setDirtyCanvas(true, true)
+        }
+        return
+      }
+
       // Empty canvas / pins / free reroutes: clear gate selection (a marquee will
       // re-select through the teeth proxies).
       if (!e.shiftKey) clearGateSelection()

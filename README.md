@@ -19,14 +19,19 @@ recent ComfyUI (tested on 0.28-0.30, frontend 1.47-1.48) with Nodes 2.0.
 - Manual: `git clone https://github.com/vtokic/comfyui-cable-management` into
   `ComfyUI/custom_nodes/`, restart ComfyUI.
 
-**Mandatory Settings**
+**Cable Management Settings**
 
-- `Settings > Comfy > Nodes 2.0 > Modern Node Design (Nodes 2.0)` ON
+PCB Routing and Ribbons
+
 - `Settings > Lite Graph > Graph > Link Render Mode` "PCB"
 
-**Recommended Settings**
+Input/Widget Passthroughs and drawers
 
+- `Settings > Comfy > Nodes 2.0 > Modern Node Design (Nodes 2.0)` ON
 - `Settings > Lite Graph > Graph > Cable Management` ON (Modifies nodes' UI, enables passthrough and daisy-chaining)
+
+**Recommended ComfyUI Settings**
+
 - `Settings > Lite Graph > Link > Link midpoint markers` "Arrow"
 - `Settings > Lite Graph > Link Release > Action on link release (No modifier)`
   "context menu" (Makes reroutes easier to create)

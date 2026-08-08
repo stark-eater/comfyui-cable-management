@@ -32,9 +32,21 @@ const screenOfGraph = (gx, gy) => page.evaluate(([gx, gy]) => {
 }, [gx, gy])
 const screenOfSlot = (key) => page.evaluate((key) => {
   const d = document.querySelector(`[data-slot-key="${key}"]`)
-  if (!d) return null
-  const r = d.getBoundingClientRect()
-  return [r.x + r.width / 2, r.y + r.height / 2]
+  if (d) {
+    const r = d.getBoundingClientRect()
+    return [r.x + r.width / 2, r.y + r.height / 2]
+  }
+  // Legacy (non-Vue) session: no slot DOM -- derive the same point from graph
+  // geometry. Key format: `${nodeId}-in|out-${slot}`.
+  const m = /^(.+)-(in|out)-(\d+)$/.exec(key)
+  if (!m) return null
+  const g = window.app.graph
+  const n = g.getNodeById(m[1]) ?? g.getNodeById(Number(m[1]))
+  if (!n) return null
+  const p = n.getConnectionPos(m[2] === 'in', Number(m[3]))
+  if (!p) return null
+  const { ds } = window.app.canvas
+  return [(p[0] + ds.offset[0]) * ds.scale, (p[1] + ds.offset[1]) * ds.scale]
 }, key)
 const dragScreen = async (from, to) => {
   await page.mouse.move(from[0], from[1])
