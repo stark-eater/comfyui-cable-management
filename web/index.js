@@ -31,6 +31,7 @@ import { install as installBridge } from "./bridge.js";
 import { install as installPaste } from "./paste.js";
 import { install as installConvert } from "./convert.js";
 import { install as installStitch, reapStitches, stitchIds } from "./stitch.js";
+import { install as installUnpack } from "./unpack.js";
 import { migrateCoverage } from "./covered.js";
 import { isEnabled, setEnabled } from "./enabled.js";
 
@@ -73,6 +74,7 @@ function ensureLedger() {
   installPaste();
   installConvert();
   installStitch(app);
+  installUnpack(app); // backup site; the primary (ungated) install is in setup()
   if (ledgerReady) return;
   if (ledger.install(app, buildLedger)) {
     ledger.watch(app);
@@ -409,6 +411,10 @@ app.registerExtension({
   ],
 
   async setup() {
+    // Deliberately OUTSIDE the enabled gate: unpack record translation repairs
+    // serialised data, not rendering -- a disabled extension must not lose a
+    // workflow's machinery to an unpack either.
+    installUnpack(app);
     setEnabled(app.extensionManager?.setting?.get(SETTING) !== false);
     if (isEnabled()) start();
   },
