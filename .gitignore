@@ -6,4 +6,5 @@ harness/*.png
 harness/*.log
 harness/battery-results*.txt
 __pycache__/
-WGIMCO-AUDIT.md
+FEATURE_REQUESTS_AND_BUGS.md
+reddit-comments.htmlnode.zip
