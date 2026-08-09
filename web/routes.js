@@ -50,9 +50,9 @@
 import { nodeById } from "./graph.js";
 import { isOwned, ownerOf, materialiseIn } from "./primitive.js";
 import { anchorOf, invalidate } from "./ledger.js";
+import { stampFloats } from "./routestore.js";
 
 const FROM = "cablemanagement.from";
-const FLOATFROM = "cablemanagement_floatfrom"; // graph.extra: rerouteId -> [hostId, hostIndex]
 
 const getLink = (graph, id) =>
   graph.getLink ? graph.getLink(id) : graph._links?.get?.(id) ?? graph.links?.[id];
@@ -173,8 +173,7 @@ export function pass(graph) {
             if (tail != null) {
               // The parked float should draw from the pin it apparently
               // descends from, not from the dead chain's true origin.
-              const ff = ((graph.extra ??= {})[FLOATFROM] ??= {});
-              ff[String(tail)] ??= [String(h), Number(hIdx)];
+              stampFloats(graph, [tail], [String(h), Number(hIdx)], { ifAbsent: true });
             }
             summary.severed.push(`${node.id}:${idx}`);
             changed = true;

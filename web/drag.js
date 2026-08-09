@@ -25,6 +25,7 @@ import { pinAt } from "./pins.js";
 import { materialise, ownerOf, hold, release } from "./primitive.js";
 import { recordProvenance, recordGateProvenance, provenanceOf, forgetProvenance, severSource } from "./reanchor.js";
 import { invalidate, anchorOf } from "./ledger.js";
+import { floatSrc, routeSrc, stampFloats, unclaimIfSrc } from "./routestore.js";
 
 /** The element core listens on. Key format is `${nodeId}-${'in'|'out'}-${index}`. */
 function slotDot(nodeId, index, isInput) {
@@ -107,17 +108,11 @@ function pinWires(graph, host, index) {
  * THIS pin are cleared; another pin's riders keep theirs.
  */
 function clearChainStamps(graph, parentId, host, index) {
-  const extra = graph?.extra;
-  if (!extra) return;
   let rid = parentId;
   let guard = 0;
   while (rid != null && guard++ < 100) {
-    for (const key of ["cablemanagement_floatfrom", "cablemanagement_routefrom"]) {
-      const rec = extra[key]?.[String(rid)];
-      if (rec && String(rec[0]) === String(host.id) && Number(rec[1]) === index) {
-        delete extra[key][String(rid)];
-      }
-    }
+    unclaimIfSrc(graph, "floats", rid, host.id, index);
+    unclaimIfSrc(graph, "reroutes", rid, host.id, index);
     rid = graph.getReroute?.(rid)?.parentId;
   }
 }
@@ -406,14 +401,11 @@ export function install(app) {
    * Lives in graph.extra: serialises with the workflow, one unread key without
    * the extension.
    */
-  const FLOATFROM = "cablemanagement_floatfrom";
   const floatFromOf = (graph, link) => {
-    const ff = graph?.extra?.[FLOATFROM];
-    if (!ff) return null;
     let rid = link?.parentId;
     let guard = 0;
     while (rid != null && guard++ < 100) {
-      const rec = ff[String(rid)];
+      const rec = floatSrc(graph, rid);
       if (rec) return rec;
       rid = graph.getReroute?.(rid)?.parentId;
     }
@@ -425,14 +417,11 @@ export function install(app) {
   // provenance-less link and the ribbon's apparent source decayed one
   // reconnect at a time (churn QA). Null stamp = conflicting sources, no
   // inheritance.
-  const ROUTEFROM = "cablemanagement_routefrom";
   const routeFromOf = (graph, link) => {
-    const rf = graph?.extra?.[ROUTEFROM];
-    if (!rf) return null;
     let rid = link?.parentId;
     let guard = 0;
     while (rid != null && guard++ < 100) {
-      const rec = rf[String(rid)];
+      const rec = routeSrc(graph, rid);
       if (rec) return rec;
       rid = graph.getReroute?.(rid)?.parentId;
     }
@@ -452,9 +441,7 @@ export function install(app) {
       try {
         const p = currentPending();
         if (p && reroute && this.graph) {
-          const extra = (this.graph.extra ??= {});
-          const ff = (extra[FLOATFROM] ??= {});
-          ff[String(reroute.id)] = [String(p.host.id), p.index];
+          stampFloats(this.graph, [reroute.id], [String(p.host.id), p.index]);
           invalidate();
         }
       } catch {

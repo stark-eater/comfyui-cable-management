@@ -140,7 +140,7 @@ const park = await page.evaluate((ids) => {
   const g = window.app.graph
   const rec = g.extra.cablemanagement_combs[0]
   const fl = [...(g.floatingLinks?.values?.() ?? [])]
-  const ff = g.extra.cablemanagement_floatfrom ?? null
+  const ff = (() => { const b = g.extra?.cablemanagement_routes; const o = {}; for (const k of Object.keys(b?.claims?.floats ?? {})) o[k] = b.routes[b.claims.floats[k]]?.src ?? null; return Object.keys(o).length ? o : null })()
   let ffRec = null
   if (fl[0] && ff) {
     let rid = fl[0].parentId, guard = 0
@@ -155,7 +155,7 @@ const park = await page.evaluate((ids) => {
     lanes: rec?.lanes.length, floating: fl.length,
     floatId: fl[0]?.id ?? null, floatParent: fl[0]?.parentId ?? null,
     lane2: rec?.lanes[2] ?? null, ff, ffRec,
-    draw: fl[0] != null ? window.__cablemanagementDraw.get(fl[0].id) ?? null : null,
+    draw: fl[0] != null ? window.__cablemanagementDraw.get('f' + fl[0].id) ?? null : null,
     aOut: [aOut[0], aOut[1]],
     connecting: window.app.canvas.linkConnector.renderLinks.length
   }
@@ -217,7 +217,7 @@ const done = await page.evaluate((ids) => {
     floating: g.floatingLinks.size,
     chain, laneChain: lane ? [lane.in, lane.out] : null,
     prov: S2?.properties?.['cablemanagement.from'] ?? null,
-    ff: g.extra.cablemanagement_floatfrom ?? null,
+    ff: (() => { const b = g.extra?.cablemanagement_routes; const o = {}; for (const k of Object.keys(b?.claims?.floats ?? {})) o[k] = b.routes[b.claims.floats[k]]?.src ?? null; return Object.keys(o).length ? o : null })(),
     draw: link ? window.__cablemanagementDraw.get(link.id) ?? null : null,
     aOut: [aOut[0], aOut[1]],
     connecting: window.app.canvas.linkConnector.renderLinks.length

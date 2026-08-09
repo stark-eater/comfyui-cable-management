@@ -29,6 +29,7 @@ import { activeGraph } from '../graph.js'
 import { handleGateInDrop, dimCoreSlots, undimCoreSlots } from '../drops.js'
 import { forgetProvenance, severSource } from '../reanchor.js'
 import { invalidate } from '../ledger.js'
+import { routeSrc, stampFloats, unclaim } from '../routestore.js'
 
 export function installGestures(app, active) {
   let gateDrag = null // {press: [x,y], gates: [{comb, which, origin}]}
@@ -71,12 +72,9 @@ export function installGestures(app, active) {
   // provenance-less lane has nothing to inherit and honestly draws from its
   // real origin.
   const inheritFloatFrom = (g, lane) => {
-    const rf = g.extra?.['cablemanagement_routefrom']
-    const rec = rf?.[String(lane.out)] ?? rf?.[String(lane.in)]
+    const rec = routeSrc(g, lane.out) ?? routeSrc(g, lane.in)
     if (!rec) return
-    const ff = ((g.extra ??= {})['cablemanagement_floatfrom'] ??= {})
-    ff[String(lane.in)] ??= rec
-    ff[String(lane.out)] ??= rec
+    stampFloats(g, [lane.in, lane.out], rec, { ifAbsent: true })
   }
 
   // Ctrl+alt on an IN pin severs the lane's SOURCE (core's input contract:
@@ -95,14 +93,9 @@ export function installGestures(app, active) {
       forgetProvenance(w.node, w.slot)
       severSource(g, w.node, w.slot, w.linkId)
     }
-    if (g.extra) {
-      for (const key of ['cablemanagement_floatfrom', 'cablemanagement_routefrom']) {
-        const bag = g.extra[key]
-        if (bag) {
-          delete bag[String(lane.in)]
-          delete bag[String(lane.out)]
-        }
-      }
+    for (const kind of ['floats', 'reroutes']) {
+      unclaim(g, kind, lane.in)
+      unclaim(g, kind, lane.out)
     }
     invalidate()
   }

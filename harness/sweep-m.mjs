@@ -118,7 +118,7 @@ const dump = (tag) => page.evaluate((tag) => {
     floats: [...(g.floatingLinks?.values?.() ?? [])].map((f) => ({ id: f.id, o: String(f.origin_id), t: String(f.target_id), parentId: f.parentId ?? null })),
     reroutes: [...(g.reroutes?.values?.() ?? [])].map((r) => ({ id: r.id, links: [...(r.linkIds ?? [])], floats: [...(r.floatingLinkIds ?? [])] })),
     combs: (g.extra?.cablemanagement_combs ?? []).map((c) => ({ id: c.id, lanes: c.lanes.map((l) => ({ ...l })) })),
-    floatfrom: g.extra?.cablemanagement_floatfrom ?? null,
+    floatfrom: (() => { const b = g.extra?.cablemanagement_routes; const o = {}; for (const k of Object.keys(b?.claims?.floats ?? {})) o[k] = b.routes[b.claims.floats[k]]?.src ?? null; return Object.keys(o).length ? o : null })(),
     owned: g.nodes.filter((n) => n.properties?.['cablemanagement.owned']).map((n) => String(n.id)),
     ledger: window.__cablemanagement.ledger().size
   }

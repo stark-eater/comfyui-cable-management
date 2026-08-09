@@ -69,7 +69,7 @@ const rtComb = await page.evaluate(async ({ rt }) => {
   const tooth = g.reroutes.get(lane.out)
   return {
     toothPos: [tooth.pos[0], tooth.pos[1]],
-    stamp: g.extra.cablemanagement_routefrom?.[String(lane.out)] ?? null,
+    stamp: (() => { const b = g.extra?.cablemanagement_routes; const r = b?.claims?.reroutes?.[String(lane.out)]; return r === undefined ? null : b.routes[r]?.src ?? null })(),
   }
 }, { rt })
 ok('RT: lane stamped with apparent source', Array.isArray(rtComb.stamp) && String(rtComb.stamp[0]) === rt.A,

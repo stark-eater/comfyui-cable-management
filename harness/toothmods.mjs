@@ -62,9 +62,10 @@ const feed = (id, idx) => page.evaluate(({ id, idx }) => {
   }
 }, { id, idx })
 const stamps = (laneIn, laneOut) => page.evaluate(({ laneIn, laneOut }) => {
-  const x = window.app.graph.extra ?? {}
-  const pick = (key) => ({ in: x[key]?.[String(laneIn)] ?? null, out: x[key]?.[String(laneOut)] ?? null })
-  return { rf: pick('cablemanagement_routefrom'), ff: pick('cablemanagement_floatfrom') }
+  const b = (window.app.graph.extra ?? {}).cablemanagement_routes
+  const res = (kind, id) => { const r = b?.claims?.[kind]?.[String(id)]; return r === undefined ? null : b.routes[r]?.src ?? null }
+  const pick = (kind) => ({ in: res(kind, laneIn), out: res(kind, laneOut) })
+  return { rf: pick('reroutes'), ff: pick('floats') }
 }, { laneIn, laneOut })
 let neutral = null
 const cleanup = async () => {

@@ -138,7 +138,7 @@ let st = await page.evaluate((s) => {
   return {
     outputs: sg.outputs.length,
     origin: link ? String(link.origin_id) : null,
-    rec: sg.extra?.cablemanagement_gatefrom?.[String(lid)] ?? null,
+    rec: (() => { const b = sg.extra?.cablemanagement_routes; const r = b?.claims?.gatelinks?.[String(lid)]; return r === undefined ? null : b.routes[r]?.src ?? null })(),
     draw: d ? [d[0], d[1]] : null,
   }
 }, s)

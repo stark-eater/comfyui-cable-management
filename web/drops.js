@@ -13,13 +13,12 @@
 import { activeGraph, nodeFromId, originOf } from "./graph.js";
 import { materialise, ownerOf, reapIfUnused } from "./primitive.js";
 import { recordProvenance, recordGateProvenance, settleCarriedLink } from "./reanchor.js";
+import { stampFloats, unclaim } from "./routestore.js";
 import { stitchGates, isStitch } from "./stitch.js";
 import { invalidate, anchorOf } from "./ledger.js";
 import { combAt, laneAt, toothOf, laneEnds, typeMatch } from "./pathing/combs.js";
 import { pendingPin } from "./drag.js";
 
-const FLOATFROM = "cablemanagement_floatfrom";
-const ROUTEFROM = "cablemanagement_routefrom";
 
 /** Nearest pin within 12 graph units, filtered to the dragged type. */
 function pinNear(graph, x, y, type) {
@@ -201,25 +200,20 @@ export function handleGateInDrop(app, lc, event, viaReroute) {
   }
   // The lane's apparent source follows the gesture: a pin pull re-stamps the
   // teeth with the pulled pin; a genuine output ends the illusion instead.
-  const ff = graph.extra?.[FLOATFROM];
   if (pin && hung) {
-    const ff2 = ((graph.extra ??= {})[FLOATFROM] ??= {});
-    ff2[String(lane.in)] = ff2[String(lane.out)] = [String(pin.host.id), pin.index];
-  } else if (ff) {
-    delete ff[String(lane.in)];
-    delete ff[String(lane.out)];
+    stampFloats(graph, [lane.in, lane.out], [String(pin.host.id), pin.index]);
+  } else {
+    unclaim(graph, "floats", lane.in);
+    unclaim(graph, "floats", lane.out);
   }
-  // The ROUTE stamp too, in both cases. A stale stamp actively fights the swap:
+  // The ROUTE claim too, in both cases. A stale stamp actively fights the swap:
   // the next branch pulled through the lane inherits the OLD pin as apparent
   // source and reconcile re-sources it back to the old provider, resurrecting
   // the source the user just replaced (dbg-resource-chain QA). A pin pull needs
   // no carry-over either -- its fresh consumer records re-stamp on the next
   // prune pass.
-  const rf = graph.extra?.[ROUTEFROM];
-  if (rf) {
-    delete rf[String(lane.in)];
-    delete rf[String(lane.out)];
-  }
+  unclaim(graph, "reroutes", lane.in);
+  unclaim(graph, "reroutes", lane.out);
   invalidate();
   graph.setDirtyCanvas(true, true);
   lc.__cablemanagementGateDone = true;

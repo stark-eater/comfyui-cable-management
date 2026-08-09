@@ -189,11 +189,11 @@ const s1 = await page.evaluate((base) => {
   const nearH = hOut ? routes.filter(r => Math.hypot(r.pts[0][0] - hOut[0], r.pts[0][1] - hOut[1]) < 30).map(r => r.key) : []
   return {
     stillLinked, floats, f,
-    fd: f ? window.__cablemanagementDraw.get(f.id) ?? null : null,
+    fd: f ? window.__cablemanagementDraw.get('f' + f.id) ?? null : null,
     d2: window.__cablemanagementDraw.get(base.l2) ?? null,
     lanes: rec?.lanes?.length ?? 0, hOut, nearH,
     connecting: window.app.canvas.linkConnector.isConnecting,
-    ff: g.extra?.cablemanagement_floatfrom ?? null,
+    ff: (() => { const b = g.extra?.cablemanagement_routes; const o = {}; for (const k of Object.keys(b?.claims?.floats ?? {})) o[k] = b.routes[b.claims.floats[k]]?.src ?? null; return Object.keys(o).length ? o : null })(),
     ledger: window.__cablemanagement.ledger().size
   }
 }, base)
@@ -265,7 +265,7 @@ const s2 = await page.evaluate((base) => {
     }).length
     return { id: c.id, lanes: c.lanes.length, wired }
   })
-  const ff = g.extra?.cablemanagement_floatfrom ?? null
+  const ff = (() => { const b = g.extra?.cablemanagement_routes; const o = {}; for (const k of Object.keys(b?.claims?.floats ?? {})) o[k] = b.routes[b.claims.floats[k]]?.src ?? null; return Object.keys(o).length ? o : null })()
   const ffDead = ff ? Object.keys(ff).filter(rid => !g.reroutes?.get?.(Number(rid))) : []
   const H = base.H ? (g.getNodeById(base.H) ?? g.getNodeById(Number(base.H))) : null
   const hOut = H ? [...H.getConnectionPos(false, 0)] : base.hOut

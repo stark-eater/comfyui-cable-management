@@ -19,11 +19,9 @@ import { SUPPRESS, anchorOf, invalidate } from "./ledger.js";
 import { isOwned } from "./primitive.js";
 import { isStitch } from "./stitch.js";
 import { nodeById } from "./graph.js";
+import { stampGate, stampFloats, stampRouteChain, floatSrc, gateClaims, unclaim, gc as routesGc } from "./routestore.js";
 
 const FROM = "cablemanagement.from";
-const FLOATFROM = "cablemanagement_floatfrom"; // graph.extra: rerouteId -> [hostId, hostIndex]
-const GATEFROM = "cablemanagement_gatefrom"; // graph.extra: linkId -> [hostId, hostIndex], target is the output gate
-export const ROUTEFROM = "cablemanagement_routefrom"; // graph.extra: rerouteId -> [hostId, hostIndex] | null (null = conflicting sources)
 
 /**
  * Record that `target.inputs[targetIndex]` was created by dragging the pin on (host, hostIndex).
@@ -54,9 +52,7 @@ export function recordProvenance(target, targetIndex, host, hostIndex, linkId) {
  */
 export function recordGateProvenance(graph, link, host, hostIndex) {
   if (!graph || !link || !host) return;
-  const extra = (graph.extra ??= {});
-  const gf = (extra[GATEFROM] ??= {});
-  gf[String(link.id)] = [String(host.id), hostIndex];
+  stampGate(graph, link.id, [String(host.id), hostIndex]);
 }
 
 /** A link whose target is the output gate; tolerates plain objects without the getter. */
@@ -75,13 +71,10 @@ function targetsGate(link) {
  * chain, so whichever tooth ends up on it wins.
  */
 export function migrateFloatFrom(graph, fromId, toIds) {
-  const ff = graph?.extra?.[FLOATFROM];
-  const rec = ff?.[String(fromId)];
-  if (!rec) return;
-  for (const id of toIds) {
-    if (id != null) ff[String(id)] = rec;
-  }
-  delete ff[String(fromId)];
+  const src = floatSrc(graph, fromId);
+  if (src == null) return;
+  unclaim(graph, "floats", fromId);
+  stampFloats(graph, toIds.filter((id) => id != null), src);
 }
 
 /**
@@ -339,13 +332,12 @@ export function build(graph) {
   //    real links but carry no target to hold provenance, so the pulled-from
   //    pin is recorded on the CHAIN'S REROUTE (drag.js writes graph.extra).
   //    Fallback: an owned-primitive origin is self-describing (host + slot).
-  const ff = graph.extra?.[FLOATFROM] ?? {};
   for (const link of graph.floatingLinks?.values?.() ?? []) {
     let rec = null;
     let rid = link.parentId;
     let guard = 0;
     while (rid != null && guard++ < 100 && !rec) {
-      rec = ff[String(rid)] ?? null;
+      rec = floatSrc(graph, rid) ?? null;
       if (!rec) rid = graph.getReroute?.(rid)?.parentId;
     }
     if (!rec) {
@@ -365,11 +357,9 @@ export function build(graph) {
 
   // 4. Links INTO the output gate -- provenance from graph.extra (the gate cannot
   //    carry it; see recordGateProvenance).
-  const gf = graph.extra?.[GATEFROM] ?? {};
-  for (const lid of Object.keys(gf)) {
+  for (const [lid, rec] of gateClaims(graph)) {
     const link = getLink(Number(lid));
-    if (!link || !targetsGate(link) || out.has(link.id)) continue;
-    const rec = gf[lid];
+    if (!link || !targetsGate(link) || out.has(link.id) || !rec) continue;
     if (!nodeById(graph, rec[0])) continue;
     out.set(link.id, { resolve: anchorResolver(graph, rec[0], rec[1]) });
   }
@@ -420,23 +410,16 @@ export function prune(graph) {
       if (!graph.floatingLinks?.has?.(fid)) r.floatingLinkIds.delete(fid);
     }
   }
-  // Float records whose reroute or host died are dead weight.
-  const ff = graph?.extra?.[FLOATFROM];
-  if (ff) {
-    for (const rid of Object.keys(ff)) {
-      if (!graph.reroutes?.get?.(Number(rid)) || !nodeById(graph, ff[rid][0])) delete ff[rid];
-    }
-    if (!Object.keys(ff).length) delete graph.extra[FLOATFROM];
-  }
-  // Gate records whose link or host died are dead weight too.
-  const gf = graph?.extra?.[GATEFROM];
-  if (gf) {
-    for (const lid of Object.keys(gf)) {
+  // Route-registry claims whose carrier (reroute / gate link) or src host
+  // died are dead weight; routes die with their last claim (routestore gc).
+  routesGc(graph, {
+    liveReroute: (rid) => !!graph.reroutes?.get?.(Number(rid)),
+    liveLink: (lid) => {
       const link = getLink(Number(lid));
-      if (!link || !targetsGate(link) || !nodeById(graph, gf[lid][0])) delete gf[lid];
-    }
-    if (!Object.keys(gf).length) delete graph.extra[GATEFROM];
-  }
+      return !!link && targetsGate(link);
+    },
+    liveNode: (nid) => !!nodeById(graph, nid),
+  });
   // Stitch pin records whose host died: the stitch stays (it still bridges),
   // only the pretty-draw record goes.
   for (const node of graph?.nodes ?? []) {
@@ -452,13 +435,6 @@ export function prune(graph) {
   // ambiguous, inherit nothing). Cleaned when the reroute or host dies.
   {
     const getRoute = (rid) => graph.getReroute?.(rid) ?? graph.reroutes?.get?.(rid);
-    const rf = graph?.extra?.[ROUTEFROM];
-    if (rf) {
-      for (const rid of Object.keys(rf)) {
-        if (!getRoute(Number(rid)) || (rf[rid] && !nodeById(graph, rf[rid][0]))) delete rf[rid];
-      }
-      if (!Object.keys(rf).length) delete graph.extra[ROUTEFROM];
-    }
     for (const node of graph?.nodes ?? []) {
       const map = node.properties?.[FROM];
       if (!map) continue;
@@ -466,15 +442,18 @@ export function prune(graph) {
         const from = provenanceOf(node, Number(slotIdx), graph);
         if (!from) continue;
         const link = getLink(node.inputs[Number(slotIdx)].link);
+        // The record's whole chain shares ONE route (one wire = one identity);
+        // stampRouteChain keeps the v0 per-hop semantics -- absent stamps
+        // claim, matching stamps hold, a differing stamp turns the hop into a
+        // conflict claim that inherits nothing.
+        const rids = [];
         let rid = link?.parentId;
         let guard = 0;
         while (rid != null && guard++ < 100) {
-          const stamps = ((graph.extra ??= {})[ROUTEFROM] ??= {});
-          const cur = stamps[String(rid)];
-          if (cur === undefined) stamps[String(rid)] = [String(from[0]), from[1]];
-          else if (cur && (String(cur[0]) !== String(from[0]) || Number(cur[1]) !== Number(from[1]))) stamps[String(rid)] = null;
+          rids.push(rid);
           rid = getRoute(rid)?.parentId;
         }
+        if (rids.length) stampRouteChain(graph, rids, [String(from[0]), Number(from[1])]);
       }
     }
   }

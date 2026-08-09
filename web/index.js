@@ -36,6 +36,7 @@ import { migrateCoverage } from "./covered.js";
 import { isEnabled, setEnabled } from "./enabled.js";
 import { setDebugView, debugViewActive } from "./ledger.js";
 import { reconcile as routesReconcile, installGhostRender } from "./routes.js";
+import { dump as routestoreDump } from "./routestore.js";
 
 const SETTING = "cablemanagement.enabled";
 const DEBUG_SETTING = "cablemanagement.debug";
@@ -364,6 +365,9 @@ function start() {
       app.graph?.setDirtyCanvas?.(true, true);
       return r;
     },
+    // The v1 route registry, for the harness: dump adapts legacy keys on
+    // sight, so calling it on a graph-shaped object IS the adapter.
+    routes: routestoreDump,
   };
   uninstallDrag = installDrag(app);
   wrapGraphToPrompt();

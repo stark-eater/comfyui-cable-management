@@ -163,7 +163,7 @@ st = await page.evaluate((i) => {
   return {
     floating: floats.length,
     prim: !!g.nodes.find((n) => n.type === 'PrimitiveNode'),
-    floatfrom: g.extra?.cablemanagement_floatfrom ?? null,
+    floatfrom: (() => { const b = g.extra?.cablemanagement_routes; const o = {}; for (const k of Object.keys(b?.claims?.floats ?? {})) o[k] = b.routes[b.claims.floats[k]]?.src ?? null; return Object.keys(o).length ? o : null })(),
     drawnStart: draw ? [draw[0], draw[1]] : null
   }
 }, ids)
@@ -222,7 +222,7 @@ st = await page.evaluate((i) => {
   return {
     floating: floats.length,
     stillLinked: B2.inputs[0].link != null,
-    floatfrom: g.extra?.cablemanagement_floatfrom ?? null,
+    floatfrom: (() => { const b = g.extra?.cablemanagement_routes; const o = {}; for (const k of Object.keys(b?.claims?.floats ?? {})) o[k] = b.routes[b.claims.floats[k]]?.src ?? null; return Object.keys(o).length ? o : null })(),
     drawnStart: draw ? [draw[0], draw[1]] : null
   }
 }, ids)

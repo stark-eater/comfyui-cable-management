@@ -19,12 +19,12 @@ import { recordProvenance, recordGateProvenance } from "./reanchor.js";
 import { stitchGates, isStitch } from "./stitch.js";
 import { nodeById, originOf } from "./graph.js";
 import { invalidate } from "./ledger.js";
+import { gateClaims } from "./routestore.js";
 
 const HOST = "cablemanagement.host";
 const HOST_SLOT = "cablemanagement.hostSlot";
 const FROM = "cablemanagement.from";
 const STITCH_FROM = "cablemanagement.stitchFrom";
-const GATEFROM = "cablemanagement_gatefrom";
 
 /** Both directions over one graph plus its immediate subgraphs -- pure graph ops,
  *  no DOM, so closed subgraphs heal too (their stale values would otherwise ship
@@ -149,10 +149,9 @@ export function migrateUncovered(graph) {
       if (host) groupFor(host, sf[1]).stitches.push(T);
     }
   }
-  const gf = graph.extra?.[GATEFROM] ?? {};
-  for (const lid of Object.keys(gf)) {
-    if (!Array.isArray(gf[lid])) continue; // workflow data is untrusted input
-    const [hid, hi] = gf[lid];
+  for (const [lid, rec] of gateClaims(graph)) {
+    if (!Array.isArray(rec)) continue; // workflow data is untrusted input
+    const [hid, hi] = rec;
     const host = uncoveredHost(hid, hi);
     if (!host) continue;
     const link = getLink(Number(lid));

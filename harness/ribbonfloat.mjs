@@ -62,7 +62,7 @@ const floatsOnPins = () => page.evaluate(async ({ B, iLat, iMod }) => {
   const pins = { [iLat]: pin(iLat), [iMod]: pin(iMod) }
   const near = (d, p) => d && p && Math.hypot(d[0] - p[0], d[1] - p[1]) < 4
   const onPins = out.every((f) => near(f.draw, pins[iLat]) || near(f.draw, pins[iMod]))
-  return { onPins, floats: out.length, ffKeys: Object.keys(g.extra?.cablemanagement_floatfrom ?? {}) }
+  return { onPins, floats: out.length, ffKeys: Object.keys(g.extra?.cablemanagement_routes?.claims?.floats ?? {}) }
 }, { B: ids.B, iLat: ids.iLat, iMod: ids.iMod })
 
 const s0 = await floatsOnPins()
