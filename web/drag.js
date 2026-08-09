@@ -23,7 +23,7 @@
 import { activeGraph, nodeFromId, originOf } from "./graph.js";
 import { pinAt } from "./pins.js";
 import { materialise, ownerOf, hold, release } from "./primitive.js";
-import { recordProvenance, recordGateProvenance, provenanceOf } from "./reanchor.js";
+import { recordProvenance, recordGateProvenance, provenanceOf, forgetProvenance, severSource } from "./reanchor.js";
 import { invalidate, anchorOf } from "./ledger.js";
 
 /** The element core listens on. Key format is `${nodeId}-${'in'|'out'}-${index}`. */
@@ -34,8 +34,11 @@ function slotDot(nodeId, index, isInput) {
 }
 
 /**
- * Replay the press on the real slot. Modifiers are stripped: shift means "move existing
- * links", ctrl+alt means "disconnect all", and a pass-through drag intends neither.
+ * Replay the press on the real slot. Modifiers are stripped by default: a plain
+ * pass-through drag intends neither "move existing links" (shift) nor
+ * "disconnect all" (ctrl+alt). The pin's OWN modifier gestures re-add shift
+ * deliberately -- the bundle move rides core's machinery -- and handle
+ * ctrl+alt before ever forwarding.
  *
  * The replayed event BUBBLES, and onDown is a document-capture listener -- so it sees our
  * own synthetic press before core does, and its retire-the-previous-gesture step would
@@ -43,10 +46,10 @@ function slotDot(nodeId, index, isInput) {
  * dispatchEvent is synchronous, so a flag around it is airtight.
  */
 let forwarding = false;
-function forward(app, dot, ev) {
+function forward(app, dot, ev, shift = false) {
   forwarding = true;
   try {
-    dispatchPress(dot, ev);
+    dispatchPress(dot, ev, null, shift);
   } finally {
     forwarding = false;
   }
@@ -55,7 +58,7 @@ function forward(app, dot, ev) {
   return (app.canvas?.linkConnector?.renderLinks?.length ?? 0) > 0;
 }
 
-function dispatchPress(dot, ev, at) {
+function dispatchPress(dot, ev, at, shift = false) {
   dot.dispatchEvent(
     new PointerEvent("pointerdown", {
       bubbles: true,
@@ -71,9 +74,52 @@ function dispatchPress(dot, ev, at) {
       ctrlKey: false,
       metaKey: false,
       altKey: false,
-      shiftKey: false,
+      shiftKey: shift,
     })
   );
+}
+
+const FROM = "cablemanagement.from";
+
+/** Every wire currently drawn from a pin: consumers whose record names it. */
+function pinWires(graph, host, index) {
+  const out = [];
+  for (const node of graph?._nodes ?? []) {
+    const from = node.properties?.[FROM];
+    if (!from) continue;
+    for (const [slot, rec] of Object.entries(from)) {
+      if (!rec || String(rec[0]) !== String(host.id) || Number(rec[1]) !== index) continue;
+      const idx = Number(slot);
+      const linkId = node.inputs?.[idx]?.link;
+      if (linkId == null) continue;
+      const link = graph.getLink ? graph.getLink(linkId) : graph._links?.get?.(linkId);
+      if (!link) continue;
+      out.push({ node, index: idx, linkId, parentId: link.parentId ?? null });
+    }
+  }
+  return out;
+}
+
+/**
+ * A wire genuinely leaving a pin takes the pin's apparent-source stamps on its
+ * reroute chain with it -- a stale stamp resurrects the pin as source on the
+ * next reconnect through the chain (the routefrom lesson). Only stamps naming
+ * THIS pin are cleared; another pin's riders keep theirs.
+ */
+function clearChainStamps(graph, parentId, host, index) {
+  const extra = graph?.extra;
+  if (!extra) return;
+  let rid = parentId;
+  let guard = 0;
+  while (rid != null && guard++ < 100) {
+    for (const key of ["cablemanagement_floatfrom", "cablemanagement_routefrom"]) {
+      const rec = extra[key]?.[String(rid)];
+      if (rec && String(rec[0]) === String(host.id) && Number(rec[1]) === index) {
+        delete extra[key][String(rid)];
+      }
+    }
+    rid = graph.getReroute?.(rid)?.parentId;
+  }
 }
 
 /**
@@ -155,6 +201,12 @@ function deferPreview(app, pinEl, liteNode) {
 export let attachCanvasEvents = () => false;
 // Reassigned per install(); read by the once-only connectFloatingReroute patch.
 let currentPending = () => null;
+/**
+ * The pin the in-flight drag was pulled from, or null. Gate drops (drops.js)
+ * consult this: a wire pulled from a pass-through pin must record the pin as
+ * its apparent source even when the drop is handled outside core's events.
+ */
+export let pendingPin = () => null;
 
 export function install(app) {
   // Which pin the in-flight core drag came from, plus any primitive created for it.
@@ -185,6 +237,84 @@ export function install(app) {
     ev.preventDefault();
     ev.stopPropagation();
     document.body.classList.add("cablemanagement-dragging");
+
+    // Modifier gestures, output-pin contract (audit 2g, greenlit): the pin's
+    // wires are the recorded consumers only -- the host's own feed and the
+    // true origin's hand-wired consumers are never part of the bundle.
+    const modMove = ev.shiftKey && !((ev.ctrlKey || ev.metaKey) && ev.altKey);
+    const modCut = (ev.ctrlKey || ev.metaKey) && ev.altKey && !ev.shiftKey;
+    if (modMove || modCut) {
+      const wires = pinWires(graph, host, pin.index);
+      if (wires.length) {
+        if (modCut) {
+          // Core's ctrl+alt on an output: every link cut at the press, no
+          // drag. A direct user cut keeps no memory (disconnect policy):
+          // records and the chains' pin stamps go. The cut is at the SOURCE
+          // side, matching ctrl+alt on a real output dot: a wire riding a
+          // reroute/ribbon chain leaves the chain floating toward its
+          // consumer (A, ribbon(floating)->B) -- NOT dangling from the true
+          // origin, which would keep feeding the ribbon from a source the
+          // user just cut away (2g QA: A.passthrough vs A.output asymmetry).
+          for (const w of wires) {
+            forgetProvenance(w.node, w.index);
+            clearChainStamps(graph, w.parentId, host, pin.index);
+            severSource(graph, w.node, w.index, w.linkId);
+          }
+          invalidate();
+          graph.setDirtyCanvas(true, true);
+          return clear();
+        }
+        // Shift: core's move-all-links, filtered to the pin. The press is
+        // replayed WITH shift so core builds its moving bundle from the true
+        // origin's (or owned primitive's) output; a one-shot veto on
+        // before-move-output drops every link that is not the pin's -- and
+        // unhides it, because core hides before it asks. Floating wires ride
+        // along only when their chain's stamp names this pin.
+        let dot = null;
+        if (slot.link != null) {
+          const origin = originOf(graph, host, pin.index);
+          if (!origin || origin.node === graph.inputNode) return clear(); // boundary: no output slot to move from
+          dot = slotDot(origin.node.id, origin.slot, false);
+        } else if (slot.widget) {
+          const prim = ownerOf(graph, host, pin.index);
+          if (prim) dot = slotDot(prim.id, 0, false);
+        }
+        if (!dot || !dot.getBoundingClientRect().width) return clear();
+        const lc0 = app.canvas?.linkConnector;
+        const keep = new Set(wires.map((w) => w.linkId));
+        const veto = (e) => {
+          const rl = e?.detail;
+          const link = rl?.link;
+          if (link && keep.has(link.id)) return;
+          const ff = floatFromOf(graph, link);
+          if (ff && String(ff[0]) === String(host.id) && Number(ff[1]) === pin.index) return;
+          e.preventDefault();
+          if (link) delete link._dragging;
+          const fr = rl?.fromReroute;
+          if (fr) {
+            delete fr._dragging;
+            lc0?.hiddenReroutes?.delete?.(fr);
+          }
+        };
+        lc0?.events?.addEventListener?.("before-move-output", veto);
+        let started = false;
+        try {
+          started = forward(app, dot, ev, true);
+        } finally {
+          lc0?.events?.removeEventListener?.("before-move-output", veto);
+        }
+        if (!started) return clear();
+        // NO anchorPreview here: a moving bundle's fixed end is each CONSUMER
+        // (core draws moved wires consumer -> pointer). Re-anchoring fromPos
+        // onto the pin collapsed the whole bundle into one pin -> pointer line
+        // -- indistinguishable from a plain new drag while the real wires sat
+        // hidden (Barney's QA: "a new dragging line is created instead").
+        pending = { host, index: pin.index, graph, moved: wires };
+        return;
+      }
+      // No wires: core parity -- shift or ctrl+alt on an output with nothing
+      // to move or cut degrades to the plain drag below.
+    }
 
     if (slot.link != null) {
       const origin = originOf(graph, host, pin.index);
@@ -289,10 +419,30 @@ export function install(app) {
     }
     return null;
   };
+  // Route provenance (reanchor's prune stamps it): the apparent source of the
+  // links that ride a reroute/ribbon chain. A link reconnected THROUGH the
+  // chain inherits it -- without this, every reroute-pull reconnect minted a
+  // provenance-less link and the ribbon's apparent source decayed one
+  // reconnect at a time (churn QA). Null stamp = conflicting sources, no
+  // inheritance.
+  const ROUTEFROM = "cablemanagement_routefrom";
+  const routeFromOf = (graph, link) => {
+    const rf = graph?.extra?.[ROUTEFROM];
+    if (!rf) return null;
+    let rid = link?.parentId;
+    let guard = 0;
+    while (rid != null && guard++ < 100) {
+      const rec = rf[String(rid)];
+      if (rec) return rec;
+      rid = graph.getReroute?.(rid)?.parentId;
+    }
+    return null;
+  };
   // The prototype patch survives disable/enable cycles but each install() creates a
   // fresh `pending`; the patch reads through this reassigned accessor so it always
   // sees the CURRENT generation (same pattern as attachCanvasEvents).
   currentPending = () => pending;
+  pendingPin = () => (pending?.host ? { host: pending.host, index: pending.index } : null);
   const LGN = window.LiteGraph?.LGraphNode;
   if (LGN?.prototype?.connectFloatingReroute && !LGN.prototype.__cablemanagementFloatFrom) {
     LGN.prototype.__cablemanagementFloatFrom = true;
@@ -347,9 +497,11 @@ export function install(app) {
     } else if (link) {
       // No gesture of ours in flight -- but a completion THROUGH a float chain
       // (comb out-pull, drop on the floating reroute) still descends from the
-      // pin the float was pulled from. The chain's reroute remembers.
+      // pin the float was pulled from. The chain's reroute remembers. Failing
+      // that, the route stamp: a reconnect pulled through a live reroute or
+      // ribbon inherits the chain's apparent source.
       const graph = activeGraph(app);
-      const rec = floatFromOf(graph, link);
+      const rec = floatFromOf(graph, link) ?? routeFromOf(graph, link);
       const host = rec ? nodeFromId(graph, rec[0]) : null;
       const target = host ? nodeFromId(graph, link.target_id) : null;
       if (host && target) {
@@ -426,7 +578,31 @@ export function install(app) {
    * would be wired from the true producer with no memory of the pin it was dragged from.
    * So a reset only finalises once nothing is still pending a link.
    */
+  /**
+   * Settle a shift-moved bundle: every wire that actually LEFT the pin (new
+   * link id, or cut on an empty release) takes its record and its chain's pin
+   * stamps with it -- a surviving record would let reconcile re-source the
+   * wire back to the pin's provider (the routefrom lesson). Wires that ended
+   * the gesture exactly where they started keep theirs; a drop on another
+   * pin has already re-recorded for the new pin, which this never touches.
+   * Idempotent: runs on every reset (cancelled ones included) and at finish.
+   */
+  const settleMoved = () => {
+    const moved = pending?.moved;
+    if (!moved) return;
+    const graph = pending.graph ?? activeGraph(app);
+    for (const w of moved) {
+      const rec = provenanceOf(w.node, w.index);
+      if (!rec || String(rec[0]) !== String(pending.host.id) || Number(rec[1]) !== pending.index) continue;
+      if (w.node.inputs?.[w.index]?.link === w.linkId) continue; // never moved
+      forgetProvenance(w.node, w.index);
+      clearChainStamps(graph, w.parentId, pending.host, pending.index);
+    }
+    invalidate();
+  };
+
   const finish = () => {
+    settleMoved();
     if (pending?.created) {
       // The gesture's own graph, not whatever is on screen NOW -- an Escape-dismissed
       // search box followed by a tab/subgraph switch would otherwise reap (or leak)
@@ -465,6 +641,7 @@ export function install(app) {
   // timeout races that. `pending` therefore survives `reset` and is retired by whichever
   // comes first: the link being created, or the next gesture starting.
   const onReset = () => {
+    settleMoved();
     document.body.classList.remove("cablemanagement-dragging");
   };
   // app.canvas does not exist during setup(), so linkConnector cannot be subscribed there --

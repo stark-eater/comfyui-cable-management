@@ -44,6 +44,22 @@ export function setActive(v) {
   dirty = true;
 }
 
+/**
+ * Debug view: draw the TRUTH under the illusion. Every link the ledger alters
+ * (re-anchored or suppressed) also paints its REAL geometry -- the endpoints
+ * core handed us, before substitution -- as a faint dashed spline, so "what
+ * actually feeds what" is one glance instead of console archaeology. The sync
+ * pass ghosts hidden machinery nodes to match (see index.js).
+ */
+let debugView = false;
+export function setDebugView(v) {
+  debugView = !!v;
+  dirty = true;
+}
+export function debugViewActive() {
+  return debugView;
+}
+
 /** Mark the ledger stale. Cheap; the rebuild is deferred to the next repaint. */
 export function invalidate() {
   dirty = true;
@@ -151,6 +167,30 @@ export function install(app, rebuild) {
     // entry segment "connected to true origin while dragging").
     const looseStart = member && lc?.state?.connectingTo === "output";
     const looseEnd = member && lc?.state?.connectingTo === "input";
+    // Debug view: the true wire, faint and dashed, from the ORIGINAL endpoints
+    // -- drawn under the substituted stroke (or under nothing, for SUPPRESS).
+    if (debugView && e !== undefined) {
+      try {
+        ctx.save();
+        ctx.globalAlpha = 0.28;
+        ctx.setLineDash([6, 5]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#7ec8ff";
+        ctx.beginPath();
+        ctx.moveTo(startPos[0], startPos[1]);
+        const bend = Math.max(40, Math.abs(endPos[0] - startPos[0]) * 0.4);
+        ctx.bezierCurveTo(
+          startPos[0] + bend, startPos[1],
+          endPos[0] - bend, endPos[1],
+          endPos[0], endPos[1]
+        );
+        ctx.stroke();
+        ctx.restore();
+        window.__cablemanagementDebugDraws = (window.__cablemanagementDebugDraws ?? 0) + 1;
+      } catch {
+        /* a debug overlay must never take the canvas down */
+      }
+    }
     // Anchors are resolved per frame, not cached at rebuild time. A cached point freezes the
     // moment the ORIGIN node moves: the ledger only rebuilds on link mutation, and dragging a
     // node changes no link, so the re-anchored end would stay put while the far end tracks.

@@ -26,6 +26,9 @@ import {
 // inside a subgraph, which made all comb gestures dead there and let presses hit-test
 // invisible root gates from subgraph coordinates.
 import { activeGraph } from '../graph.js'
+import { handleGateInDrop, dimCoreSlots, undimCoreSlots } from '../drops.js'
+import { forgetProvenance, severSource } from '../reanchor.js'
+import { invalidate } from '../ledger.js'
 
 export function installGestures(app, active) {
   let gateDrag = null // {press: [x,y], gates: [{comb, which, origin}]}
@@ -38,6 +41,71 @@ export function installGestures(app, active) {
   // (QA find: float pulls didn't snap; the comb pull's preview froze the moment
   // the pointer entered a node, because graph_mouse only updates over the canvas).
   let canvasPress = false
+  // Out-pin shift gesture, deferred until the pointer proves it is a drag:
+  // {lane, riders, start: [clientX, clientY]}. A release before the threshold
+  // is a click, and core's shift+click on an output touches nothing.
+  let shiftPull = null
+  // Where the current pull began (client px). A release within the click
+  // threshold resets silently -- core's slot click is a pure no-op, and the
+  // old fall-through opened the release menu and ate the next press.
+  let pullStart = null
+
+  // The wires leaving a lane's out-pin: real links riding the out-tooth.
+  const outToothRiders = (g, lane) => {
+    const outR = g.reroutes?.get?.(lane?.out)
+    const riders = []
+    for (const lid of outR?.linkIds ?? []) {
+      const link = g.getLink ? g.getLink(lid) : g._links?.get?.(lid)
+      const node = link && (g.getNodeById(link.target_id) ?? g.getNodeById(Number(link.target_id)))
+      if (node?.inputs?.[link.target_slot]) riders.push({ node, slot: link.target_slot, linkId: lid })
+    }
+    return riders
+  }
+
+  // A consumer-side cut parks the lane's origin float with its PHYSICAL
+  // origin -- the true source, not the pin the wire was drawn from. With a
+  // passthrough source those differ, and the parked wire visibly jumped to
+  // the upstream node (Barney's regression: "A's source->ribbon(floating)").
+  // Same rule as routes' own sever: the float inherits the lane's apparent
+  // source into the floatfrom stamp, so it keeps drawing from the pin. A
+  // provenance-less lane has nothing to inherit and honestly draws from its
+  // real origin.
+  const inheritFloatFrom = (g, lane) => {
+    const rf = g.extra?.['cablemanagement_routefrom']
+    const rec = rf?.[String(lane.out)] ?? rf?.[String(lane.in)]
+    if (!rec) return
+    const ff = ((g.extra ??= {})['cablemanagement_floatfrom'] ??= {})
+    ff[String(lane.in)] ??= rec
+    ff[String(lane.out)] ??= rec
+  }
+
+  // Ctrl+alt on an IN pin severs the lane's SOURCE (core's input contract:
+  // disconnect at the press, then a fresh source-seeking drag). The riders
+  // stay parked on the lane as consumer-side floats -- the 2f "waiting for a
+  // source" shape -- added BEFORE their real links go: the floats are what
+  // hold the teeth through the removal. A source cut ends the lane's
+  // apparent-source illusion (stamps go), and the riders' records go with
+  // their links; a new source dropped on the in-pin writes fresh ones.
+  const cutLaneSource = (g, lane, riders) => {
+    // severSource = core's own LLink.disconnect(graph, "input"): each rider's
+    // claim survives as a floating link through the lane, with the floating
+    // marker that makes the parked wire render (hand-built floats drew
+    // nothing -- Barney's "all links disappear but the pins remain").
+    for (const w of riders) {
+      forgetProvenance(w.node, w.slot)
+      severSource(g, w.node, w.slot, w.linkId)
+    }
+    if (g.extra) {
+      for (const key of ['cablemanagement_floatfrom', 'cablemanagement_routefrom']) {
+        const bag = g.extra[key]
+        if (bag) {
+          delete bag[String(lane.in)]
+          delete bag[String(lane.out)]
+        }
+      }
+    }
+    invalidate()
+  }
   // Selected gates follow node-group drags (marquee semantics): a press on a
   // selected NODE arms this; deltas are read off that node's own pos, which works
   // for both the legacy canvas drag and the Vue node drag.
@@ -235,12 +303,67 @@ export function installGestures(app, active) {
         if (t?.side === 'out') {
           const lc = app.canvas.linkConnector
           if (lc && !lc.isConnecting) {
+            // Modifier gestures, output-pin contract (2g round 3): the
+            // out-pin's wires are the lane's riders. Ctrl+alt cuts exactly
+            // those at the press -- consumer side only, so the lane parks as
+            // a float and its apparent-source stamps survive. Shift lifts
+            // them as core's moving bundle (a veto excludes every other link
+            // of the true origin, unhiding what core hid before asking); the
+            // release rides the normal pullDrag finish. No riders: both fall
+            // through to the plain branch pull, core parity.
+            const lane = t.comb?.lanes?.[t.lane]
+            const riders = ((e.shiftKey || ((e.ctrlKey || e.metaKey) && e.altKey)) && lane)
+              ? outToothRiders(g, lane) : []
+            if (riders.length && (e.ctrlKey || e.metaKey) && e.altKey && !e.shiftKey) {
+              for (const w of riders) {
+                forgetProvenance(w.node, w.slot)
+                w.node.disconnectInput(w.slot, true)
+              }
+              inheritFloatFrom(g, lane)
+              invalidate()
+              g.setDirtyCanvas(true, true)
+              e.stopPropagation(); e.preventDefault()
+              return
+            }
+            if (riders.length && e.shiftKey && !((e.ctrlKey || e.metaKey) && e.altKey)) {
+              // Shift = cut at the pin + carry the wires by their consumer
+              // ends -- but DEFERRED: nothing mutates until the pointer
+              // travels past the click threshold, because core's shift+CLICK
+              // on an output is a pure no-op and cutting at the press would
+              // turn a stray click into silent wire loss (audit 2g click
+              // deviation, same guard). The arm itself happens in
+              // pointermove once real dragging is evident.
+              shiftPull = { lane, riders, start: [e.clientX, e.clientY] }
+              e.stopPropagation(); e.preventDefault()
+              return
+            }
             lc.dragFromReroute(g, r)
+            dimCoreSlots(app) // canvas-born drag: no Vue session, so core's dim never fires
             pullDrag = true
+            pullStart = [e.clientX, e.clientY]
             g.setDirtyCanvas(true, true)
             e.stopPropagation(); e.preventDefault()
           }
           return
+        }
+        // Ctrl+alt on a populated IN pin: sever the lane's source and arm the
+        // fresh source-seeking drag, core's input contract (2g greenlight).
+        if (t?.side === 'in' && (e.ctrlKey || e.metaKey) && e.altKey && !e.shiftKey) {
+          const lc = app.canvas.linkConnector
+          const lane = t.comb?.lanes?.[t.lane]
+          const riders = lane && lc && !lc.isConnecting ? outToothRiders(g, lane) : []
+          if (riders.length) {
+            cutLaneSource(g, lane, riders)
+            lc.dragFromRerouteToOutput(g, r)
+            if (lc.isConnecting) {
+              dimCoreSlots(app)
+              pullDrag = true
+              pullStart = [e.clientX, e.clientY]
+            }
+            g.setDirtyCanvas(true, true)
+            e.stopPropagation(); e.preventDefault()
+            return
+          }
         }
         // In-tooth of a lane dangling at the SOURCE (input-drag parked on the
         // gate): the tip carries only a floating link with no origin. Detaching
@@ -253,7 +376,9 @@ export function installGestures(app, active) {
             const lc = app.canvas.linkConnector
             if (lc && !lc.isConnecting) {
               lc.dragFromRerouteToOutput(g, r)
+              dimCoreSlots(app)
               pullDrag = true
+              pullStart = [e.clientX, e.clientY]
               g.setDirtyCanvas(true, true)
               e.stopPropagation(); e.preventDefault()
             }
@@ -271,6 +396,48 @@ export function installGestures(app, active) {
     (e) => {
       if (!active()) return
       const [x, y] = graphPt(e)
+      if (shiftPull) {
+        // The deferred out-pin shift gesture becomes real once the pointer
+        // proves it is a drag: cut at the pin (records die, the lane parks
+        // its source float via keepReroutes) and arm the consumer-anchored
+        // bundle -- dragNewFromInput for the first wire, the rest built with
+        // the same render-link class off the first instance.
+        if (Math.hypot(e.clientX - shiftPull.start[0], e.clientY - shiftPull.start[1]) > 6) {
+          const sp = shiftPull
+          shiftPull = null
+          const lc = app.canvas?.linkConnector
+          const g2 = activeGraph(app)
+          if (lc && !lc.isConnecting && g2) {
+            for (const w of sp.riders) {
+              forgetProvenance(w.node, w.slot)
+              w.node.disconnectInput(w.slot, true)
+            }
+            inheritFloatFrom(g2, sp.lane)
+            let armed = false
+            for (const w of sp.riders) {
+              const input = w.node.inputs?.[w.slot]
+              if (!input) continue
+              if (!armed) {
+                lc.dragNewFromInput(g2, w.node, input)
+                armed = lc.isConnecting
+              } else {
+                const Ctor = lc.renderLinks[0]?.constructor
+                if (Ctor) lc.renderLinks.push(new Ctor(g2, w.node, input))
+              }
+            }
+            invalidate()
+            if (armed) {
+              if (lc.renderLinks.length > 1) lc.state.multi = true
+              dimCoreSlots(app)
+              pullDrag = true
+              pullStart = [...sp.start]
+              driveSnap(e)
+            }
+            g2.setDirtyCanvas(true, true)
+          }
+        }
+        return
+      }
       if (pullDrag) {
         // Preview rides core's connecting_links; we drive the snap position (and
         // with it, motion over node DOM -- graph_mouse freezes there).
@@ -368,6 +535,9 @@ export function installGestures(app, active) {
       follow = null
       press = null
       canvasPress = false
+      shiftPull = null
+      pullStart = null
+      undimCoreSlots()
     },
     true
   )
@@ -376,10 +546,45 @@ export function installGestures(app, active) {
     'pointerup',
     (e) => {
       canvasPress = false
+      // Source drag released on a ribbon IN pin. The Vue finalize cannot be
+      // trusted with this drop: its reroute-at-pointer stage claims success
+      // even when core's connectToRerouteInput refuses an occupied input, so
+      // the release dies with no fallback and no menu. This install-time
+      // capture listener runs BEFORE the composable's per-drag listener --
+      // handle the gate connect here; the guarded seams stay quiet after.
+      {
+        const lc = app.canvas?.linkConnector
+        const g = activeGraph(app)
+        if (lc?.isConnecting && lc.state?.connectingTo === 'input' && g && active()) {
+          try {
+            const [x, y] = graphPt(e)
+            handleGateInDrop(app, lc, { canvasX: x, canvasY: y })
+          } catch {
+            /* never break a release; the normal drop pipeline continues */
+          }
+        }
+      }
+      if (shiftPull) {
+        // Never left the click threshold: core's shift+click on an output is
+        // a pure no-op, and nothing was mutated yet. Just disarm.
+        shiftPull = null
+        return
+      }
       if (pullDrag) {
         pullDrag = false
         const lc = app.canvas?.linkConnector
         const g = activeGraph(app)
+        // Zero-motion release: a core slot click is a pure no-op -- reset
+        // silently instead of running drop resolution, which fell through to
+        // the release menu and ate the user's next press (audit 2g).
+        if (pullStart && Math.hypot(e.clientX - pullStart[0], e.clientY - pullStart[1]) <= 6) {
+          pullStart = null
+          lc?.reset?.(true)
+          g?.setDirtyCanvas(true, true)
+          undimCoreSlots()
+          return
+        }
+        pullStart = null
         if (lc && g) {
           const [x, y] = graphPt(e)
           // Vue pins live in the DOM with centres ON the node's boundary, where the
@@ -428,6 +633,7 @@ export function installGestures(app, active) {
           lc.reset?.(true)
           g.setDirtyCanvas(true, true)
         }
+        undimCoreSlots()
         return
       }
       if (gateDrag) { gateDrag = null; activeGraph(app)?.setDirtyCanvas(true, true); return }

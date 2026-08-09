@@ -19,7 +19,7 @@ import { beginFrame, debugRoutes, routeFor, stats } from "./pathing/registry.js"
 import { clearOverlay, combAt, drawGates, gestureFloatingEnroll, installApi, toothOf } from "./pathing/combs.js";
 import { installGestures } from "./pathing/combgestures.js";
 import { emit, pointAt } from "./pathing/trace.js";
-import { handlePinDrop, installPinDrops } from "./drops.js";
+import { handlePinDrop, handleGateInDrop, installPinDrops, undimPins, undimCoreSlots } from "./drops.js";
 import { activeGraph } from "./graph.js";
 import { isEnabled } from "./enabled.js";
 
@@ -192,7 +192,12 @@ function tryDropSeams() {
         // A throw here wedges the whole interaction (no cleanup, connector stuck
         // connecting) -- degrade to the native drop instead.
         try {
+          // A drag the gate-pin handler already consumed must not reach the
+          // release menu or core's drop stages -- there is nothing left to drop.
+          if (lc.__cablemanagementGateDone) return;
           if (active()) {
+            // Source drag onto an IN gate pin: connect through that lane (drops.js).
+            if (handleGateInDrop(app, lc, event)) return;
             const hit = combAt(g, event.canvasX, event.canvasY);
             if (hit && hit.zone !== "pins" && gestureFloatingEnroll(g, lc, hit.comb)) {
               g.setDirtyCanvas(true, true);
@@ -253,8 +258,30 @@ function tryDropSeams() {
       }
       return origDropOnNode(node, event);
     };
+    // Teeth are reroutes on the pin column, so core's drop pipeline resolves a
+    // drop there as dropOnReroute and dropOnNothing never fires -- the gate
+    // in-pin handler must intercept this seam as well (measured: output-drags
+    // on a live lane's in-pin no-opped, core has no swap-through-reroute).
+    if (typeof lc.dropOnReroute === "function") {
+      const origDropOnReroute = lc.dropOnReroute.bind(lc);
+      lc.dropOnReroute = (reroute, event) => {
+        if (event && reroute && activeGraph(app) && isEnabled()) {
+          try {
+            if (handleGateInDrop(app, lc, event, reroute)) return;
+          } catch (err) {
+            console.warn("cablemanagement: gate-pin drop failed", err);
+          }
+        }
+        return origDropOnReroute(reroute, event);
+      };
+    }
     lc.events?.addEventListener?.("reset", () => {
       lc.__cablemanagementPinDone = false;
+      lc.__cablemanagementGateDone = false;
+      // Gesture over: every dim this drag applied comes off, deterministically
+      // (the pointermove fallback only clears once the mouse moves again).
+      undimPins();
+      undimCoreSlots();
     });
     installPinDrops(app);
   }

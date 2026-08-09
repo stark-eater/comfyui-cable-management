@@ -16,6 +16,7 @@ const ok = (label, cond, extra = '') => {
 }
 await page.goto(process.env.COMFY_URL ?? 'http://127.0.0.1:8187', { waitUntil: 'domcontentloaded', timeout: 90_000 })
 await page.waitForFunction(() => window.app?.graph && window.__cablemanagement, null, { timeout: 120_000 })
+await page.evaluate(() => window.__cablemanagement?.debugView?.(false)) // operator may test with debug view on; assert against stealth
 await page.waitForTimeout(2500)
 
 // Widget passthrough via a real pin drag (A.ckpt_name -> B.ckpt_name).

@@ -33,6 +33,7 @@ await page.waitForFunction(
   null, { timeout: 120_000 }
 )
 await page.waitForTimeout(2500)
+await page.evaluate(() => window.__cablemanagement?.debugView?.(false)) // operator may test with debug view on; assert against stealth
 
 let pass = true
 const ok = (label, cond, extra = '') => {

@@ -12,7 +12,8 @@
 //
 // PoC surface: programmatic API only (window.__cablemanagementCombs). Gestures come after.
 import { offsetStrand, route } from './router.js'
-import { activeGraph } from '../graph.js'
+import { activeGraph, nodeFromId } from '../graph.js'
+import { migrateFloatFrom } from '../reanchor.js'
 
 const KEY = 'cablemanagement_combs'
 const GATE_W = 24 // gate body width; the pin->lane fan hides inside it
@@ -380,6 +381,56 @@ export function combAt(graph, x, y) {
   return null
 }
 
+/** The lane whose pin sits nearest a y inside a gate's pin column. */
+export function laneAt(comb, which, y) {
+  const gate = comb[which]
+  if (!gate || !comb.lanes.length) return null
+  const i = Math.round((y - (gate.pos[1] + PAD)) / PIN_PITCH)
+  return comb.lanes[Math.max(0, Math.min(comb.lanes.length - 1, i))] ?? null
+}
+
+/** Core's own laxness: unknown or wildcard on either side is a match. */
+export function typeMatch(a, b) {
+  return a == null || b == null || a === '*' || b === '*' || String(a) === String(b)
+}
+
+/**
+ * A lane's ends, sorted the way gate drops consume them: real links riding the
+ * out-tooth; floats parked with a real target (a consumer waiting for a
+ * source); floats holding only a real origin (a source waiting for a
+ * consumer). Shared by the drop itself, the snap magnet, and the dim pass, so
+ * the hint can never disagree with the drop.
+ */
+export function laneEnds(graph, lane) {
+  const getLink = (id) => (graph.getLink ? graph.getLink(id) : graph._links?.get?.(id))
+  const outR = graph.reroutes?.get?.(lane.out)
+  const links = []
+  const targets = []
+  const parked = []
+  const hanging = []
+  if (outR) {
+    for (const lid of outR.linkIds ?? []) {
+      const l = getLink(lid)
+      const t = l && nodeFromId(graph, l.target_id)
+      if (t?.inputs?.[l.target_slot]) {
+        links.push(l)
+        targets.push({ node: t, slot: l.target_slot })
+      }
+    }
+    for (const f of graph.floatingLinks?.values?.() ?? []) {
+      if (f.parentId !== lane.in && f.parentId !== lane.out) continue
+      const t = nodeFromId(graph, f.target_id)
+      if (t?.inputs?.[f.target_slot]) {
+        targets.push({ node: t, slot: f.target_slot })
+        parked.push(f)
+      } else if (nodeFromId(graph, f.origin_id)?.outputs?.[f.origin_slot]) {
+        hanging.push(f)
+      }
+    }
+  }
+  return { outR, links, targets, parked, hanging }
+}
+
 // All tooth creation goes through this: core's LGraph.createReroute seeds the new
 // reroute's floatingLinkIds with [before.id] when `before` is a REAL link (latent
 // core bug, present 1.47.10 and 1.48.6) and nothing ever prunes the unresolvable
@@ -404,6 +455,9 @@ function absorb(graph, comb, reroute) {
   const tIn = mint(graph, reroute)
   const tOut = mint(graph, reroute)
   if (!tIn || !tOut) return false
+  // A parked float's pin record is keyed by the reroute about to die -- move it
+  // onto the teeth or the float snaps back to its true origin (QA 2f).
+  migrateFloatFrom(graph, reroute.id, [tIn.id, tOut.id])
   graph.removeReroute(reroute.id)
   comb.lanes.push({ in: tIn.id, out: tOut.id })
   return true
@@ -530,8 +584,38 @@ function drawGate(ctx, graph, comb, which, sel, canvas) {
   ctx.strokeStyle = sel ? (L?.NODE_BOX_OUTLINE_COLOR ?? '#fff') : (L?.NODE_DEFAULT_BOXCOLOR ?? '#666')
   ctx.lineWidth = sel ? 1.5 : 1
   ctx.stroke()
+  // The dim contract: while a link drags, targets the drop cannot use fade to
+  // 40% -- the same cue core slots give. An in-pin serves a source drag when the
+  // lane has a compatible open end, and a consumer drag when the lane has a
+  // source; an out-pin only ever receives consumer drags. The pulled lane's own
+  // pin stays bright: it is the drag's source, not a refused target.
+  const lc = canvas?.linkConnector
+  const drag = lc?.isConnecting && lc.renderLinks?.length
+    ? {
+        to: lc.state?.connectingTo,
+        type: lc.renderLinks[0]?.fromSlot?.type,
+        fromRid: lc.renderLinks[0]?.fromReroute?.id,
+      }
+    : null
   comb.lanes.forEach((l, i) => {
     const t = graph.reroutes?.get?.(l[which])
+    let dim = false
+    if (drag) {
+      const ends = laneEnds(graph, l)
+      const carried = ends.links[0]?.type ?? ends.parked[0]?.type ?? ends.hanging[0]?.type ?? null
+      if (which === 'out') {
+        dim = drag.to !== 'output' || !typeMatch(carried, drag.type)
+      } else if (drag.to === 'input') {
+        dim = !(
+          ends.targets.some((x) => typeMatch(drag.type, x.node.inputs[x.slot]?.type)) ||
+          ends.hanging.some((f) => typeMatch(drag.type, f.type))
+        )
+      } else {
+        dim = !((ends.links.length || ends.hanging.length) && typeMatch(carried, drag.type))
+      }
+      if (dim && l[which] === drag.fromRid) dim = false
+    }
+    ctx.globalAlpha = dim ? 0.4 : 1
     ctx.beginPath()
     ctx.arc(g.pinX, g.pinY(i), 4, 0, Math.PI * 2)
     ctx.fillStyle = t?._colour ?? canvas?.default_link_color ?? '#999'
@@ -540,6 +624,7 @@ function drawGate(ctx, graph, comb, which, sel, canvas) {
     ctx.lineWidth = 1
     ctx.stroke()
   })
+  ctx.globalAlpha = 1
   // Flow caret (polish round): the IN gate points pins->ribbon, the OUT gate
   // ribbon->pins -- both read as travel direction, so a comb scans source-to-sink
   // at a glance and the two gates are tellable apart.

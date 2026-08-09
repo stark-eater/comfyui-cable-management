@@ -71,7 +71,11 @@ const after = await page.evaluate(async i => {
 console.log('during:', JSON.stringify(during))
 console.log('after :', JSON.stringify(after))
 const anchored = during.fromPos && during.want && Math.abs(during.fromPos[0] - during.want[0]) < 2 && Math.abs(during.fromPos[1] - during.want[1]) < 2
-const pass = anchored && !after.bLinked && after.cLinked && after.bProv === null &&
+// bProv stays as a DORMANT record since the midchain round (2b): prune keeps
+// disconnected-input records as route memory for the fallback walk. It must
+// still name the dead link (self-invalidating), never a live one.
+const bProvDormant = after.bProv === null || (!after.bLinked && after.bProv[2] != null)
+const pass = anchored && !after.bLinked && after.cLinked && bProvDormant &&
   JSON.stringify(after.cProv?.slice(0, 2)) === JSON.stringify([ids.A, 1]) &&
   after.cText === 'moved value' && after.prims === 1 && after.ledger === 1
 console.log('preview anchored to pin:', anchored ? 'YES' : 'NO')

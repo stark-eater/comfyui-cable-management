@@ -109,11 +109,19 @@ function translate(graph, snap) {
     if (from) {
       const next = {};
       for (const k of Object.keys(from)) {
-        const [hostId, hostIdx] = from[k];
-        // The record's link id is re-stamped from the recreated slot: core
+        const [hostId, hostIdx, oldLid] = from[k];
+        const lid = n.inputs?.[Number(k)]?.link;
+        // Severed memory (null link id) survives the unpack: the fragment's
+        // shape is worth exactly as much outside the subgraph as in it. Its
+        // tail reroute cannot follow -- core drops floating links on unpack,
+        // so the parked chain is gone -- the ghost falls back to the pin.
+        if (oldLid === null && lid == null) {
+          next[k] = [mapNode(hostId), hostIdx, null];
+          continue;
+        }
+        // A live record's link id is re-stamped from the recreated slot: core
         // rebuilt the same topology, so the input's CURRENT link is the same
         // wire under a new id. No link survived -> drop rather than lie.
-        const lid = n.inputs?.[Number(k)]?.link;
         if (lid == null) continue;
         next[k] = [mapNode(hostId), hostIdx, lid];
       }

@@ -34,8 +34,11 @@ import { install as installStitch, reapStitches, stitchIds } from "./stitch.js";
 import { install as installUnpack } from "./unpack.js";
 import { migrateCoverage } from "./covered.js";
 import { isEnabled, setEnabled } from "./enabled.js";
+import { setDebugView, debugViewActive } from "./ledger.js";
+import { reconcile as routesReconcile, installGhostRender } from "./routes.js";
 
 const SETTING = "cablemanagement.enabled";
+const DEBUG_SETTING = "cablemanagement.debug";
 
 let queued = false;
 let uninstallDrag = null;
@@ -128,16 +131,26 @@ function sync() {
   // Stitch reroutes get the same invisibility treatment as owned primitives.
   for (const id of stitchIds(graph)) owned.add(id);
   prune(graph);
+  // Route reconciliation (2e): honest sever / re-source / re-materialize. The
+  // rAF sync is the backstop for programmatic edits; gesture edits are caught
+  // synchronously by ensureRoutesEvents so they share the gesture's undo step.
+  installGhostRender(app);
+  ensureRoutesEvents();
+  ensureTrackerWrap();
+  routesReconcile(app, graph);
 
   for (const nodeEl of document.querySelectorAll(".lg-node[data-node-id]")) {
     const id = nodeEl.dataset.nodeId;
 
     if (owned.has(id)) {
-      if (nodeEl.dataset.cablemanagementHidden !== "1") {
-        nodeEl.dataset.cablemanagementHidden = "1";
-        nodeEl.style.visibility = "hidden";
-        nodeEl.style.pointerEvents = "none";
-      }
+      // Debug view: machinery stays visible as a ghost -- see it, never touch
+      // it. Both branches keep re-asserting their style so toggling the view
+      // converges on the next sync pass without extra bookkeeping.
+      const ghost = debugViewActive();
+      nodeEl.dataset.cablemanagementHidden = "1";
+      nodeEl.style.visibility = ghost ? "" : "hidden";
+      nodeEl.style.opacity = ghost ? "0.35" : "";
+      nodeEl.style.pointerEvents = "none";
       clearNode(nodeEl);
       continue;
     }
@@ -146,6 +159,7 @@ function sync() {
     if (nodeEl.dataset.cablemanagementHidden === "1") {
       delete nodeEl.dataset.cablemanagementHidden;
       nodeEl.style.visibility = "";
+      nodeEl.style.opacity = "";
       nodeEl.style.pointerEvents = "";
     }
 
@@ -215,6 +229,50 @@ function reapOrphans(graph) {
   // with what configure() recomputes from topology -- same redo-wiping drift as
   // the widget set. Realign whenever machinery is present.
   if (owned) graph.updateExecutionOrder?.();
+}
+
+/**
+ * Route reconciliation must run in the SAME STACK as the gesture that changed the
+ * links, or its severs/reconnects land in a separate undo step from the user's own
+ * edit. The link connector's events fire synchronously at gesture end; reconcile()
+ * itself skips while a drag is still in flight, and the rAF sync pass remains the
+ * backstop for anything these events miss.
+ */
+let routesLc = null;
+function ensureRoutesEvents() {
+  const lc = app.canvas?.linkConnector?.events;
+  if (!lc || lc === routesLc) return;
+  routesLc = lc;
+  const run = () => {
+    if (isEnabled()) routesReconcile(app, activeGraph(app));
+  };
+  for (const ev of ["link-created", "input-moved", "output-moved", "after-drop-links", "reset"]) {
+    lc.addEventListener?.(ev, run);
+  }
+}
+
+/**
+ * Undo-step atomicity BY CONSTRUCTION: reconcile immediately before the change
+ * tracker captures, so every state it records is post-reconciliation -- no undo
+ * step can ever land on a cut-but-not-yet-severed graph (which reconcile would
+ * instantly re-mutate, wiping redo and fighting the user). Skipped during
+ * undo/redo restore itself: restored states were captured reconciled.
+ */
+let trackerWrapped = false;
+function ensureTrackerWrap() {
+  if (trackerWrapped) return;
+  const proto = app.extensionManager?.workflow?.activeWorkflow?.changeTracker?.constructor?.prototype;
+  if (!proto || typeof proto.captureCanvasState !== "function") return;
+  const orig = proto.captureCanvasState;
+  proto.captureCanvasState = function (...args) {
+    try {
+      if (!this._restoringState && isEnabled()) routesReconcile(app, activeGraph(app));
+    } catch {
+      /* the capture itself must never fail */
+    }
+    return orig.apply(this, args);
+  };
+  trackerWrapped = true;
 }
 
 /** Coalesce the storm of mutations a single graph edit produces into one rebuild. */
@@ -290,7 +348,23 @@ function start() {
   // stylesheet. Not togglable: pass-through pins need the right edge of every input
   // and widget row, which is exactly what this layout frees.
   document.body.classList.add("cablemanagement-layout");
-  window.__cablemanagement = { ledger: () => ledger.debug(), sync, syncs: () => syncCount };
+  window.__cablemanagement = {
+    ledger: () => ledger.debug(),
+    sync,
+    syncs: () => syncCount,
+    // Runtime-only toggle for the harness -- no settings write, no persistence.
+    debugView: (v) => {
+      setDebugView(v === true);
+      app.graph?.setDirtyCanvas?.(true, true);
+      window.dispatchEvent(new CustomEvent("cablemanagement:resync"));
+    },
+    // Harness access to one explicit route reconciliation (normally event-driven).
+    routesPass: () => {
+      const r = routesReconcile(app, activeGraph(app));
+      app.graph?.setDirtyCanvas?.(true, true);
+      return r;
+    },
+  };
   uninstallDrag = installDrag(app);
   wrapGraphToPrompt();
   wrapLoadGraphData();
@@ -370,6 +444,7 @@ function stop() {
   for (const el of document.querySelectorAll('.lg-node[data-cablemanagement-hidden="1"]')) {
     delete el.dataset.cablemanagementHidden;
     el.style.visibility = "";
+    el.style.opacity = "";
     el.style.pointerEvents = "";
   }
 }
@@ -408,6 +483,23 @@ app.registerExtension({
         isEnabled() ? start() : stop();
       },
     },
+    {
+      id: DEBUG_SETTING,
+      // Same section as the master toggle -- "a checkbox next to it".
+      category: ["LiteGraph", "Graph", "Cable Management Debug"],
+      name: "Cable Management debug view",
+      tooltip:
+        "Show the truth under the illusion: every re-anchored or suppressed link " +
+        "also draws its REAL wire as a faint dashed spline, and hidden machinery " +
+        "nodes appear as untouchable ghosts.",
+      type: "boolean",
+      defaultValue: false,
+      onChange: (value) => {
+        setDebugView(value === true);
+        app.graph?.setDirtyCanvas?.(true, true);
+        window.dispatchEvent(new CustomEvent("cablemanagement:resync")); // ghost pass
+      },
+    },
   ],
 
   async setup() {
@@ -416,6 +508,7 @@ app.registerExtension({
     // workflow's machinery to an unpack either.
     installUnpack(app);
     setEnabled(app.extensionManager?.setting?.get(SETTING) !== false);
+    setDebugView(app.extensionManager?.setting?.get(DEBUG_SETTING) === true);
     if (isEnabled()) start();
   },
 });

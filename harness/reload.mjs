@@ -9,6 +9,7 @@ const errs = []
 page.on('pageerror', e => errs.push(String(e).split('\n')[0]))
 await page.goto(process.env.COMFY_URL ?? 'http://127.0.0.1:8187', { waitUntil: 'domcontentloaded', timeout: 90_000 })
 await page.waitForFunction(() => window.app && window.app.graph, null, { timeout: 120_000 })
+await page.evaluate(() => window.__cablemanagement?.debugView?.(false)) // operator may test with debug view on; assert against stealth
 await page.waitForTimeout(3000)
 const ids = await page.evaluate(async () => {
   const g = window.app.graph, L = window.LiteGraph; g.clear()
@@ -38,6 +39,7 @@ console.log('saved nodes:', saved.nodes.map(n => `${n.id}:${n.type}`).join(', ')
 // Fresh page, load the saved workflow.
 await page.reload({ waitUntil: 'domcontentloaded' })
 await page.waitForFunction(() => window.app && window.app.graph, null, { timeout: 120_000 })
+await page.evaluate(() => window.__cablemanagement?.debugView?.(false)) // operator may test with debug view on; assert against stealth
 await page.waitForTimeout(2500)
 const after = await page.evaluate(async ({ saved, ids }) => {
   await window.app.loadGraphData(saved)

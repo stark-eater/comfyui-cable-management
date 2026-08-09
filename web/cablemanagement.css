@@ -71,6 +71,12 @@ body.cablemanagement-layout .lg-node [data-testid^="node-body-"] > .mt-auto {
   --node-component-slot-dot-outline-opacity-mult: 5;
 }
 
+/* The dim contract: while a link drags, core fades every slot the drop cannot
+   use to 40% -- pins follow, or they read as valid targets they are not. */
+.cablemanagement-pin[data-cablemanagement-dim="1"] {
+  opacity: 0.4;
+}
+
 
 
 

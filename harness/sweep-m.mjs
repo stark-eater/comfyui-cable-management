@@ -197,8 +197,12 @@ if (s1base.links.length === 2 && s1base.links.every((l) => l.base)) {
   console.log('    state:', JSON.stringify(d1))
   ok('[s1] origin links died with A', d1.links.filter((l) => l.o === s1.A).length === 0, JSON.stringify(d1.links))
   await assertInv2('s1 post-delete')
+  // 2e contract: the origin's death is an UPSTREAM break -- the consumers stay
+  // as severed memory (null link id), a revivable ghost fragment, not pruned.
   const prov1 = await page.evaluate((ids) => window.app.graph.getNodeById(Number(ids.S2))?.properties?.['cablemanagement.from'] ?? null, s1)
-  ok('[s1] S2 provenance pruned', !prov1 || Object.keys(prov1).length === 0, JSON.stringify(prov1))
+  ok('[s1] S2 provenance kept as severed memory (2e fragment)',
+    prov1 && Object.keys(prov1).length > 0 && Object.values(prov1).every((r) => r[2] === null),
+    JSON.stringify(prov1))
 }
 
 // ======================================================================== scene 2

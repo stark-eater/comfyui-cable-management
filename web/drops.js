@@ -15,10 +15,11 @@ import { materialise, ownerOf, reapIfUnused } from "./primitive.js";
 import { recordProvenance, recordGateProvenance } from "./reanchor.js";
 import { stitchGates, isStitch } from "./stitch.js";
 import { invalidate, anchorOf } from "./ledger.js";
+import { combAt, laneAt, toothOf, laneEnds, typeMatch } from "./pathing/combs.js";
+import { pendingPin } from "./drag.js";
 
-function typeMatch(a, b) {
-  return a == null || b == null || a === "*" || b === "*" || String(a) === String(b);
-}
+const FLOATFROM = "cablemanagement_floatfrom";
+const ROUTEFROM = "cablemanagement_routefrom";
 
 /** Nearest pin within 12 graph units, filtered to the dragged type. */
 function pinNear(graph, x, y, type) {
@@ -37,6 +38,187 @@ function pinNear(graph, x, y, type) {
     }
   }
   return best;
+}
+
+/**
+ * The IN-gate lane a point addresses: the pin strip resolves by row, and a
+ * near-miss lands on the closest in-tooth within the same 12-unit radius the
+ * reroute belt uses. One region function for the drop AND the snap magnet, so
+ * the hint only ever pops where a release would land.
+ */
+export function inLaneAt(graph, x, y) {
+  const hit = combAt(graph, x, y);
+  if (hit && hit.which === "in" && hit.zone === "pins") {
+    const lane = laneAt(hit.comb, "in", y);
+    if (lane) return lane;
+  }
+  // Inside a gate but not on the in-pin strip: the point belongs to that
+  // zone's own semantics (body = park a NEW lane) -- the near-miss radius
+  // below must not poach it, or the body's pin-side edge silently populates
+  // an existing lane instead of creating one (Barney's collision question).
+  if (hit) return null;
+  let best = null;
+  let bd = 12;
+  for (const r of graph.reroutes?.values?.() ?? []) {
+    const t = toothOf(r.id);
+    if (!t || t.side !== "in") continue;
+    const d = Math.hypot(r.pos[0] - x, r.pos[1] - y);
+    if (d < bd) {
+      bd = d;
+      best = t.comb?.lanes?.[t.lane] ?? null;
+    }
+  }
+  return best;
+}
+
+/**
+ * The out-pin anchor a CONSUMER drag of this type would connect through, or
+ * null. Mirror of gateInNear (Barney's QA caveat: input-side snapped, output
+ * side didn't). The drop itself lands through the dropOnNothing wrap's
+ * nearest-reroute fallback -- tooth within 12 units, core dropOnReroute
+ * semantics: consumer feeds from the lane's source through the tooth -- so
+ * the hint uses the same radius and the same "lane has a compatible source"
+ * predicate, and pops only where that release would connect.
+ */
+function gateOutNear(graph, x, y, type) {
+  let best = null;
+  let bd = 12;
+  for (const r of graph.reroutes?.values?.() ?? []) {
+    const t = toothOf(r.id);
+    if (!t || t.side !== "out") continue;
+    const d = Math.hypot(r.pos[0] - x, r.pos[1] - y);
+    if (d < bd) {
+      bd = d;
+      best = { reroute: r, lane: t.comb?.lanes?.[t.lane] ?? null };
+    }
+  }
+  if (!best?.lane) return null;
+  const { links, hanging, parked } = laneEnds(graph, best.lane);
+  const carried = links[0]?.type ?? hanging[0]?.type ?? parked[0]?.type ?? null;
+  const hasSource = links.length || hanging.length;
+  if (!hasSource || !typeMatch(type, carried)) return null;
+  return { anchor: [best.reroute.pos[0], best.reroute.pos[1]] };
+}
+
+/** The in-pin anchor a source drag of this type would connect through, or null. */
+function gateInNear(graph, x, y, type) {
+  const lane = inLaneAt(graph, x, y);
+  if (!lane) return null;
+  const { targets, hanging } = laneEnds(graph, lane);
+  const ok =
+    targets.some((t) => typeMatch(type, t.node.inputs[t.slot]?.type)) ||
+    hanging.some((f) => typeMatch(type, f.type));
+  if (!ok) return null;
+  const r = graph.reroutes?.get?.(lane.in);
+  return r ? { anchor: [r.pos[0], r.pos[1]] } : null;
+}
+
+/**
+ * A SOURCE drag dropped on a ribbon gate's IN pin -- the direction core has no
+ * gesture for at all ("ribbon input pins don't accept links", QA 2f). The pin
+ * names a lane; the drop gives that lane the dragged output as its source:
+ *   - lane carrying real links: their source is swapped (core connect replaces
+ *     occupied inputs, afterRerouteId re-threads the same teeth);
+ *   - source-dangling lane (float parked with a real target): the lane finally
+ *     gets its source, and the parked float is retired;
+ *   - source-HANGING lane (float pulled from a pin, no target yet -- how a
+ *     floating ribbon is built): the float's source is replaced in place. The
+ *     new float must be added BEFORE the old one is removed: core's
+ *     removeFloatingLink garbage-collects reroutes at zero links, and the old
+ *     float is all that holds the teeth.
+ * Provenance follows the GESTURE: a drag from a real output writes none (the
+ * source is genuinely what the user wired; any floatfrom illusion on the lane
+ * ends). A drag pulled from a PASS-THROUGH PIN records the pin as the apparent
+ * source -- consumer records for real links, floatfrom for a replaced hanging
+ * float -- exactly as the same pull dropped anywhere else would (QA: a pin
+ * pull onto an unpopulated in-pin visibly connected from the true origin).
+ */
+export function handleGateInDrop(app, lc, event, viaReroute) {
+  const graph = activeGraph(app);
+  if (!graph || lc.state?.connectingTo !== "input") return false;
+  // One gate connect per gesture: the capture-phase pointerup handles first,
+  // then the same release travels the Vue finalize and the drop seams.
+  if (lc.__cablemanagementGateDone) return false;
+  // Teeth ARE reroutes sitting on the pin column, so core's drop pipeline
+  // hit-tests them BEFORE dropOnNothing ever fires -- this handler is wired
+  // into BOTH seams: dropOnReroute hands the tooth over directly, the
+  // dropOnNothing path resolves the lane from gate geometry.
+  let lane = null;
+  if (viaReroute) {
+    const t = toothOf(viaReroute.id);
+    if (!t || t.side !== "in") return false;
+    lane = t.comb?.lanes?.[t.lane] ?? null;
+  } else {
+    lane = inLaneAt(graph, event.canvasX, event.canvasY);
+  }
+  if (!lane) return false;
+  // The lane's ends: real links riding the out-tooth; parked floats holding a
+  // real target (source-dangling); floats holding only a real origin
+  // (source-hanging -- a wire pulled from a pin awaiting a consumer).
+  const { outR, targets, parked, hanging } = laneEnds(graph, lane);
+  if (!outR) return false;
+  if (!targets.length && !hanging.length) return false;
+
+  const pin = pendingPin?.() ?? null; // the pass-through pin this drag was pulled from, if any
+  let did = false;
+  let hung = null; // the replacement float, when the hanging path ran
+  for (const rl of lc.renderLinks) {
+    if (rl.toType !== "input") continue;
+    const srcNode = rl.node;
+    const srcIdx = srcNode?.outputs?.indexOf?.(rl.fromSlot);
+    if (srcNode == null || srcIdx == null || srcIdx < 0) continue;
+    for (const t of targets) {
+      if (!typeMatch(rl.fromSlot?.type, t.node.inputs[t.slot]?.type)) continue;
+      const link = srcNode.connect(srcIdx, t.node, t.slot, lane.out);
+      if (link) {
+        did = true;
+        if (pin) recordProvenance(t.node, t.slot, pin.host, pin.index, link.id);
+      }
+    }
+    for (const f of hanging) {
+      if (!typeMatch(rl.fromSlot?.type, f.type)) continue;
+      const LLinkC = window.LiteGraph?.LLink;
+      if (!LLinkC || !graph.addFloatingLink) continue;
+      const next = new LLinkC(-1, rl.fromSlot.type, srcNode.id, srcIdx, -1, -1);
+      next.parentId = f.parentId;
+      graph.addFloatingLink(next); // FIRST: the old float is all that holds the teeth
+      graph.removeFloatingLink?.(f);
+      hung = next;
+      did = true;
+    }
+  }
+  if (!did) return false;
+  // Core retires floats whose terminus is the chain's LAST reroute; a float
+  // parked on the IN tooth is not, so it goes by hand.
+  for (const f of parked) {
+    if (graph.floatingLinks?.has?.(f.id)) graph.removeFloatingLink?.(f);
+  }
+  // The lane's apparent source follows the gesture: a pin pull re-stamps the
+  // teeth with the pulled pin; a genuine output ends the illusion instead.
+  const ff = graph.extra?.[FLOATFROM];
+  if (pin && hung) {
+    const ff2 = ((graph.extra ??= {})[FLOATFROM] ??= {});
+    ff2[String(lane.in)] = ff2[String(lane.out)] = [String(pin.host.id), pin.index];
+  } else if (ff) {
+    delete ff[String(lane.in)];
+    delete ff[String(lane.out)];
+  }
+  // The ROUTE stamp too, in both cases. A stale stamp actively fights the swap:
+  // the next branch pulled through the lane inherits the OLD pin as apparent
+  // source and reconcile re-sources it back to the old provider, resurrecting
+  // the source the user just replaced (dbg-resource-chain QA). A pin pull needs
+  // no carry-over either -- its fresh consumer records re-stamp on the next
+  // prune pass.
+  const rf = graph.extra?.[ROUTEFROM];
+  if (rf) {
+    delete rf[String(lane.in)];
+    delete rf[String(lane.out)];
+  }
+  invalidate();
+  graph.setDirtyCanvas(true, true);
+  lc.__cablemanagementGateDone = true;
+  lc.renderLinks.length = 0; // consume: no later stage may reconnect this drag
+  return true;
 }
 
 export function handlePinDrop(app, lc, event) {
@@ -163,6 +345,41 @@ export function installPinDrops(app) {
       const lc = app.canvas?.linkConnector;
       if (!lc?.isConnecting) return;
       try {
+        // Pin self-drop guard (audit 2g): a pin drag released on its own
+        // HOST's body. Core treats same-node loopback as a strict no-op; the
+        // replayed drag's true origin differs from the host, so core's guard
+        // never fires and the implied body-connect would tear down and
+        // RECREATE the host's own feed -- link-id churn, and a silently
+        // orphaned reroute when the feed was threaded. Aiming at a specific
+        // slot DOT still connects (slot resolution outranks the body); only
+        // the implied body drop is consumed.
+        const pin = lc.state?.connectingTo === "input" ? pendingPin?.() : null;
+        if (pin && lc.renderLinks.length) {
+          const el = document.elementFromPoint(e.clientX, e.clientY);
+          const nodeEl = el?.closest?.("[data-node-id]");
+          if (nodeEl?.dataset?.nodeId === String(pin.host.id)) {
+            // A release aimed at a DIFFERENT, type-compatible input dot of the
+            // host is a deliberate connect and passes through; anything else
+            // on the host -- body, title, widget rows, the pin's own input --
+            // is the loopback and gets core's no-op.
+            const key =
+              el?.closest?.("[data-slot-key]")?.getAttribute?.("data-slot-key") ??
+              el
+                ?.closest?.(".lg-slot, .lg-node-widget")
+                ?.querySelector?.("[data-slot-key]")
+                ?.getAttribute?.("data-slot-key");
+            const m = key && /^(.+)-in-(\d+)$/.exec(key);
+            const idx = m ? +m[2] : null;
+            const legit =
+              m &&
+              idx !== pin.index &&
+              typeMatch(pin.host.inputs?.[idx]?.type, lc.renderLinks[0]?.fromSlot?.type);
+            if (!legit) {
+              lc.renderLinks.length = 0;
+              return;
+            }
+          }
+        }
         const c = app.canvas;
         const p = c.convertEventToCanvasOffset?.(e);
         if (!p) return;
@@ -185,10 +402,25 @@ export function installPinDrops(app) {
   // the pointermove below feeds them, and clears only its own stale write.
   let lastPt = null;
   const magnet = (lc) => {
-    if (!lastPt || lc.state.connectingTo !== "output") return null;
+    if (!lastPt) return null;
     const graph = activeGraph(app);
     if (!graph) return null;
-    return pinNear(graph, lastPt[0], lastPt[1], lc.renderLinks[0]?.fromSlot?.type);
+    const type = lc.renderLinks[0]?.fromSlot?.type;
+    // Consumer drags magnetise onto pass-through pins and ribbon out-pins
+    // (whichever is closer); source drags onto the ribbon in-pins their drop
+    // seam accepts -- always the same predicate as the drop.
+    if (lc.state.connectingTo === "output") {
+      const pin = pinNear(graph, lastPt[0], lastPt[1], type);
+      const out = gateOutNear(graph, lastPt[0], lastPt[1], type);
+      if (pin && out) {
+        const dPin = Math.hypot(pin.anchor[0] - lastPt[0], pin.anchor[1] - lastPt[1]);
+        const dOut = Math.hypot(out.anchor[0] - lastPt[0], out.anchor[1] - lastPt[1]);
+        return dPin <= dOut ? pin : out;
+      }
+      return pin ?? out;
+    }
+    if (lc.state.connectingTo === "input") return gateInNear(graph, lastPt[0], lastPt[1], type);
+    return null;
   };
   const armSnap = (lc) => {
     const st = lc?.state;
@@ -214,6 +446,7 @@ export function installPinDrops(app) {
       const lc = app.canvas?.linkConnector;
       if (!lc?.isConnecting) {
         lastPt = null;
+        undimPins();
         return;
       }
       try {
@@ -229,10 +462,84 @@ export function installPinDrops(app) {
           lc.state.snapLinksPos = undefined;
           lc.__cablemanagementMagnetPos = null;
         }
+        dimPins(lc);
       } catch (err) {
         console.warn("cablemanagement: pin magnet failed", err);
       }
     },
     true
   );
+}
+
+/**
+ * The dim contract on pass-through pins: while a link drags, core fades every
+ * slot the drop cannot use to 40%; a full-brightness pin among dimmed slots
+ * reads as a valid target it is not (audit 2g). A pin is usable only by a
+ * consumer drag of a matching type; the pin the drag was pulled from stays
+ * bright -- it is the source, not a refused target. Re-applied per move (pins
+ * re-sync during drags), DOM writes guarded to actual changes.
+ */
+let pinsDimmed = false;
+function dimPins(lc) {
+  pinsDimmed = true;
+  const to = lc.state?.connectingTo;
+  const type = lc.renderLinks[0]?.fromSlot?.type;
+  const src = pendingPin?.();
+  for (const el of document.querySelectorAll(".cablemanagement-pin")) {
+    const own =
+      src &&
+      String(src.host.id) === el.dataset.cablemanagementNode &&
+      String(src.index) === el.dataset.cablemanagementIndex;
+    const valid = own || (to === "output" && typeMatch(el.dataset.cablemanagementType, type));
+    if (valid) delete el.dataset.cablemanagementDim;
+    else if (el.dataset.cablemanagementDim !== "1") el.dataset.cablemanagementDim = "1";
+  }
+}
+export function undimPins() {
+  if (!pinsDimmed) return;
+  pinsDimmed = false;
+  for (const el of document.querySelectorAll(".cablemanagement-pin[data-cablemanagement-dim]")) {
+    delete el.dataset.cablemanagementDim;
+  }
+}
+
+/**
+ * The same contract for CORE slots during drags core cannot see -- link drags
+ * born on the canvas (tooth pulls) have no Vue drag session, so the composable
+ * that dims incompatible slot DOM never runs. Computed once at drag start,
+ * exactly like core's own compat map; inline opacity because the Vue store is
+ * unreachable from extension land, cleared by undimCoreSlots on gesture end
+ * (Vue never writes inline opacity, so there is nothing to fight).
+ */
+const coreDimmed = new Set();
+export function dimCoreSlots(app) {
+  const lc = app.canvas?.linkConnector;
+  if (!lc?.isConnecting || !lc.renderLinks?.length) return;
+  const graph = activeGraph(app);
+  if (!graph) return;
+  const to = lc.state?.connectingTo;
+  const want = to === "input" ? "in" : "out";
+  for (const el of document.querySelectorAll("[data-slot-key]")) {
+    const m = /^(.+)-(in|out)-(\d+)$/.exec(el.getAttribute("data-slot-key") ?? "");
+    if (!m) continue;
+    const node = nodeFromId(graph, m[1]);
+    if (!node) continue;
+    let valid = false;
+    if (m[2] === want) {
+      const slot = (to === "input" ? node.inputs : node.outputs)?.[+m[3]];
+      valid =
+        !!slot &&
+        lc.renderLinks.some((rl) =>
+          to === "input" ? rl.canConnectToInput?.(node, slot) : rl.canConnectToOutput?.(node, slot)
+        );
+    }
+    if (!valid) {
+      el.style.opacity = "0.4";
+      coreDimmed.add(el);
+    }
+  }
+}
+export function undimCoreSlots() {
+  for (const el of coreDimmed) el.style.opacity = "";
+  coreDimmed.clear();
 }
