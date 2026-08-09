@@ -27,7 +27,7 @@ const DIR = {
   none: [1, 0]
 }
 
-export function route({ start, end, startDir = 'right', endDir = 'left', obstacles, clearance = 16, stubStart = 24, stubEnd = 24, enforceStart = false, enforceEnd = false }) {
+export function route({ start, end, startDir = 'right', endDir = 'left', obstacles, clearance = 16, stubStart = 24, stubEnd = 24, enforceStart = false, enforceEnd = false, vPad = 0 }) {
   // Reroute ends (core passes CENTER -> 'none') are resolved by the registry to the
   // upstream's side before this call; the mapping here is only a fallback.
   const sv = DIR[startDir === 'none' ? 'right' : startDir] ?? DIR.right
@@ -47,8 +47,12 @@ export function route({ start, end, startDir = 'right', endDir = 'left', obstacl
   const rects = []
   const hard = [] // the real node boxes: crossing these is the 8x sin
   for (const r of obstacles) {
-    const x0 = r[0] - clearance, y0 = r[1] - clearance
-    const x1 = r[0] + r[2] + clearance, y1 = r[1] + r[3] + clearance
+    // vPad makes every obstacle taller FOR THE GRID ONLY (Barney's shadow rule):
+    // horizontal lanes form that much further from node tops/bottoms, so wires
+    // stand clear of the drop shadow instead of grazing it. Vertical lanes stay
+    // put -- pin-column corridors are deliberate geometry.
+    const x0 = r[0] - clearance, y0 = r[1] - clearance - vPad
+    const x1 = r[0] + r[2] + clearance, y1 = r[1] + r[3] + clearance + vPad
     if (x1 < bb[0] || x0 > bb[2] || y1 < bb[1] || y0 > bb[3]) continue
     rects.push([x0, y0, x1, y1])
     hard.push([r[0] - 4, r[1] - 4, r[0] + r[2] + 4, r[1] + r[3] + 4])

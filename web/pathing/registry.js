@@ -414,7 +414,9 @@ export function routeFor(canvas, linkData) {
     stubEnd,
     // Gate faces bind; node pins and free reroutes keep the relaxed fold.
     enforceStart: !!tS,
-    enforceEnd: !!tE
+    enforceEnd: !!tE,
+    // Shadow standoff, quantized like clearance so lanes stay on-grid.
+    vPad: grid ? Math.ceil(8 / grid) * grid : 8
   })
   const entry = raw
     ? {

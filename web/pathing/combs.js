@@ -251,7 +251,8 @@ export function crossingPts(graph, comb, lane, obstacles, clearance, version) {
         stubStart: 24 + halfRibbon,
         stubEnd: 24 + halfRibbon,
         enforceStart: true, // gate faces are binding (flip round)
-        enforceEnd: true
+        enforceEnd: true,
+        vPad: 8 // same shadow standoff the plain routes keep off node bodies
       })
       cached = { stamp, tpl }
       tplCache.set(comb.id, cached)

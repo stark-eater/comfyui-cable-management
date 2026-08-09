@@ -86,6 +86,19 @@ function corridor(cluster, axis, along, obstacles, center) {
 }
 
 function spreadComponent(cluster, axis, along, obstacles) {
+  // Same-pin sticking (#3, Barney's rule): links leaving one shared pin -- a
+  // node output or a reroute/tooth exit -- overlap while colinear and only
+  // separate where they branch; the rule ends at the next anchor, which is
+  // where the entry's polyline ends anyway. All of a strand's segments take
+  // ONE lane and one offset; strangers still get spread away from the bundle.
+  const strandKey = (s) => (s.e.start ? `${s.e.start[0] | 0},${s.e.start[1] | 0}` : String(s.e.key))
+  const strands = new Map()
+  for (const s of cluster) {
+    const key = strandKey(s)
+    if (!strands.has(key)) strands.set(key, [])
+    strands.get(key).push(s)
+  }
+  if (strands.size < 2) return
   // Anti-braid lane order, pairwise: for members L and R of one corridor, placing
   // L on the -perp side costs one crossing for every R attachment (the horizontal
   // entering/leaving R's run) that extends toward -perp THROUGH L's span, and vice
@@ -93,15 +106,20 @@ function spreadComponent(cluster, axis, along, obstacles) {
   // pattern (stepped entries, stepped exits) and the nested pattern (entries
   // inside each other's spans) -- no single-key ordering covers both. Comparator
   // may be non-transitive in pathological mixes; "prefer to avoid" is the spec.
-  const meta = cluster.map((s) => {
-    const pts = s.e.pts
-    const a = pts[s.k], b = pts[s.k + 1]
-    const lane = a[axis]
+  const meta = [...strands.values()].map((list) => {
+    const span = [Infinity, -Infinity]
     const att = []
-    const prev = pts[s.k - 1], next = pts[s.k + 2]
-    if (prev) att.push({ y: a[along], dir: Math.sign(prev[axis] - lane) || 0 })
-    if (next) att.push({ y: b[along], dir: Math.sign(next[axis] - lane) || 0 })
-    return { s, span: s.span, att }
+    for (const s of list) {
+      if (s.span[0] < span[0]) span[0] = s.span[0]
+      if (s.span[1] > span[1]) span[1] = s.span[1]
+      const pts = s.e.pts
+      const a = pts[s.k], b = pts[s.k + 1]
+      const lane = a[axis]
+      const prev = pts[s.k - 1], next = pts[s.k + 2]
+      if (prev) att.push({ y: a[along], dir: Math.sign(prev[axis] - lane) || 0 })
+      if (next) att.push({ y: b[along], dir: Math.sign(next[axis] - lane) || 0 })
+    }
+    return { list, span, att }
   })
   const covers = (span, y) => y > span[0] + 1 && y < span[1] - 1
   const cost = (L, R) => {
@@ -110,9 +128,8 @@ function spreadComponent(cluster, axis, along, obstacles) {
     for (const a of L.att) if (a.dir > 0 && covers(R.span, a.y)) c++
     return c
   }
-  meta.sort((p, q) => cost(p, q) - cost(q, p) || String(p.s.e.key).localeCompare(String(q.s.e.key)))
-  const ordered = meta.map((m) => m.s)
-  const mid = (ordered.length - 1) / 2
+  meta.sort((p, q) => cost(p, q) - cost(q, p) || String(p.list[0].e.key).localeCompare(String(q.list[0].e.key)))
+  const mid = (meta.length - 1) / 2
   // Bias the fan away from the nearest node instead of centring it blindly on the
   // lane -- the lane is an inflated node edge, so half the spread otherwise walks
   // INTO the node (polish round: bunched gap runs pushed under neighbours). Minimal
@@ -133,20 +150,22 @@ function spreadComponent(cluster, axis, along, obstacles) {
   } else {
     shift = (lo + hi) / 2 - centre // narrow corridor: both bounds are finite here
   }
-  ordered.forEach((s, i) => {
+  meta.forEach((m, i) => {
     const offset = (i - mid) * LANE + shift
     if (offset === 0) return
-    const pts = s.e.pts
-    const a = pts[s.k], b = pts[s.k + 1]
-    const orig = a[axis]
-    const nv = orig + offset
-    // Keep the adjacent stubs honest: same side as the pin, never shorter than MIN_STUB.
-    // (Perpendicularity is guaranteed -- simplify() merged collinear runs -- so a shift
-    // only ever changes a stub's length, not its orientation.)
-    if (s.k === 1 && !stubOk(pts[0][axis], orig, nv)) return
-    if (s.k === pts.length - 3 && !stubOk(pts[pts.length - 1][axis], orig, nv)) return
-    a[axis] = nv
-    b[axis] = nv
+    for (const s of m.list) {
+      const pts = s.e.pts
+      const a = pts[s.k], b = pts[s.k + 1]
+      const orig = a[axis]
+      const nv = orig + offset
+      // Keep the adjacent stubs honest: same side as the pin, never shorter than MIN_STUB.
+      // (Perpendicularity is guaranteed -- simplify() merged collinear runs -- so a shift
+      // only ever changes a stub's length, not its orientation.)
+      if (s.k === 1 && !stubOk(pts[0][axis], orig, nv)) continue
+      if (s.k === pts.length - 3 && !stubOk(pts[pts.length - 1][axis], orig, nv)) continue
+      a[axis] = nv
+      b[axis] = nv
+    }
   })
 }
 
