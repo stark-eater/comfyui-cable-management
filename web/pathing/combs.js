@@ -13,7 +13,7 @@
 // PoC surface: programmatic API only (window.__cablemanagementCombs). Gestures come after.
 import { offsetStrand, route } from './router.js'
 import { activeGraph, nodeFromId } from '../graph.js'
-import { migrateFloatFrom } from '../reanchor.js'
+import { migrateFloatFrom, settleCarriedLink } from '../reanchor.js'
 
 const KEY = 'cablemanagement_combs'
 const GATE_W = 24 // gate body width; the pin->lane fan hides inside it
@@ -525,6 +525,12 @@ export function gestureFloatingEnroll(graph, lc, comb) {
     // would-be source end and the terminus sits nearest the real input).
     comb.lanes.push({ in: rIn.id, out: terminus.id })
     made = true
+    // A drag CARRYING an existing link (core pickup by either end) parked
+    // here is a MOVE into limbo: the donor end empties. Skipping this left
+    // the original link alive alongside the fresh float (QA: 'adds a
+    // floating lane connected to B AND leaves A->B untouched -- impossible
+    // state'). Float first -- it must exist before the donor link dies.
+    settleCarriedLink(graph, rl)
   }
   if (made) layout(graph, comb)
   return made
@@ -611,7 +617,10 @@ function drawGate(ctx, graph, comb, which, sel, canvas) {
           ends.hanging.some((f) => typeMatch(drag.type, f.type))
         )
       } else {
-        dim = !((ends.links.length || ends.hanging.length) && typeMatch(carried, drag.type))
+        // Consumer drags never land on an in-pin: ribbon.input is input-like,
+        // and input-to-input is a no-op by force of logic (polarity ruling) --
+        // the drop seam consumes it, so the pin must not advertise (hint=truth).
+        dim = true
       }
       if (dim && l[which] === drag.fromRid) dim = false
     }

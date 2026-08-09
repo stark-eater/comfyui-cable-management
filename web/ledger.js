@@ -150,7 +150,15 @@ export function install(app, rebuild) {
   proto._renderAllLinkSegments = function (
     ctx, link, startPos, endPos, visibleReroutes, now, startDir, endDir, disabled
   ) {
-    const e = passActive ? entries.get(link?.id) : undefined;
+    // Identity decides the key space: core's FLOATING links have their own id
+    // counter and render through this same path, so a float whose id collides
+    // with a pin-recorded real link inherited that link's substitution and
+    // drew from a stranger's pin (Barney's floating_input workflow: float 68
+    // vs pin link 68 -- 'a link between a random node and the ribbon').
+    // Real links look up bare ids; floats look up 'f'-prefixed entries (the
+    // floating-ribbon pin illusion lives there, built by the same convention).
+    const isReal = link?.id != null && this.graph?.getLink?.(link.id) === link;
+    const e = passActive && link?.id != null ? entries.get(isReal ? link.id : "f" + link.id) : undefined;
     // `_dragging` alone is NOT "being dragged": core stamps it on every
     // output-attached floating link as a permanent style flag, each frame
     // (renderFloatingLinks). Nor is a live connector enough -- during ANY drag
@@ -211,7 +219,10 @@ export function install(app, rebuild) {
     // substitution -- are the one honest record of where links are actually drawn (layout
     // store internals are unreadable, and getConnectionPos lies in Vue mode).
     if (window.__cablemanagementCapture && link && !(active && e === SUPPRESS)) {
-      (window.__cablemanagementDraw ??= new Map()).set(link.id, [start[0], start[1], end[0], end[1]]);
+      // Floats key with an 'f' prefix: their id space is separate from real
+      // links, and a bare-id collision let a float overwrite a real link's
+      // captured endpoints (same conflation the substitution guard above ends).
+      (window.__cablemanagementDraw ??= new Map()).set(isReal ? link.id : "f" + link.id, [start[0], start[1], end[0], end[1]]);
     }
     // Returning early means renderedPaths.add(link) never runs, so a suppressed link also
     // leaves hit-testing, the midpoint dot and the tooltip for this frame -- which is what we

@@ -56,7 +56,7 @@ const floatsOnPins = () => page.evaluate(async ({ B, iLat, iMod }) => {
   }
   const out = []
   for (const f of g.floatingLinks?.values?.() ?? []) {
-    const d = window.__cablemanagementDraw.get(f.id)
+    const d = window.__cablemanagementDraw.get('f' + f.id)
     out.push({ id: f.id, draw: d ? [Math.round(d[0]), Math.round(d[1])] : null })
   }
   const pins = { [iLat]: pin(iLat), [iMod]: pin(iMod) }

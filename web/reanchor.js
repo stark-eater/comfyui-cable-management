@@ -131,6 +131,39 @@ export function severSource(graph, node, slot, linkId) {
 }
 
 /**
+ * The live graph link a render link is CARRYING, or null. Core's moved-link
+ * drags (MovingInputLink / MovingOutputLink -- pick an existing link up by
+ * either end) hold the LLink in .link; fresh drags carry nothing, and a
+ * FloatingRenderLink's .link is a floating link that never sits in the graph's
+ * link map, so the map lookup is the whole discriminator.
+ */
+export function carriedLinkOf(graph, rl) {
+  const l = rl?.link;
+  if (!l || l.id == null || l.id < 0) return null;
+  const live = graph?.getLink ? graph.getLink(l.id) : graph?._links?.get?.(l.id);
+  return live === l ? l : null;
+}
+
+/**
+ * Core's move contract, applied by hand: a moved link that LANDS somewhere
+ * dies at its donor end (measured baseline P8: move never copies; the
+ * empty-canvas drop disconnects via the same method). Our gate surfaces
+ * connect through raw graph calls instead of the render link's polymorphic
+ * connect methods, so the donor kill they skip happens here: forget the donor
+ * input's provenance first (a dead link's record would let reconcile
+ * resurrect the feed), then run the render link's own disconnect --
+ * MovingInputLink empties the donor input, MovingOutputLink removes the donor
+ * output's link. No-op for fresh drags, and for carried links the connect
+ * already destroyed by replacement (an input holds one link).
+ */
+export function settleCarriedLink(graph, rl) {
+  if (!carriedLinkOf(graph, rl)) return false;
+  if (rl.inputNode) forgetProvenance(rl.inputNode, rl.inputIndex);
+  if (typeof rl.disconnect === "function") rl.disconnect();
+  return true;
+}
+
+/**
  * The true-source pin of a link whose origin is an owned primitive: its host's
  * widget input. Null for links from visible nodes -- an all-disconnected walk
  * there should end in an honest draw from the real origin.
@@ -322,7 +355,11 @@ export function build(graph) {
       }
     }
     if (rec && nodeById(graph, rec[0])) {
-      out.set(link.id, { resolve: anchorResolver(graph, rec[0], rec[1], terminusOf(graph, link), link) });
+      // 'f'-prefixed key: floats have their own id counter, so a bare float
+      // id can collide with a REAL link's -- this entry used to overwrite the
+      // real link's substitution (and the lookup handed either entry to
+      // either object; Barney's floating_input workflow, float 68 vs link 68).
+      out.set("f" + link.id, { resolve: anchorResolver(graph, rec[0], rec[1], terminusOf(graph, link), link) });
     }
   }
 

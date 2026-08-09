@@ -53,7 +53,7 @@ const setup = await page.evaluate(async () => {
   const fid = [...g.floatingLinks.keys()].pop()
   window.__cablemanagementCapture = true
   for (let i = 0; i < 4; i++) { g.setDirtyCanvas(true, true); await new Promise(res => setTimeout(res, 150)) }
-  const d = window.__cablemanagementDraw?.get(fid)
+  const d = window.__cablemanagementDraw?.get('f' + fid)
   const hPos = H.getConnectionPos(false, 0)
   return { fid, reroute: r?.id ?? null, start: d ? [d[0], d[1]] : null, hPos: [hPos[0], hPos[1]] }
 })
@@ -69,7 +69,7 @@ const mid = await page.evaluate(async i => {
   if (typeof lc.dragNewFromOutput === 'function') lc.dragNewFromOutput(g, E, E.outputs[0])
   else lc.dragFromSlot?.(g, E, E.outputs[0])
   for (let k = 0; k < 4; k++) { g.setDirtyCanvas(true, true); await new Promise(res => setTimeout(res, 150)) }
-  const d = window.__cablemanagementDraw?.get(i.fid)
+  const d = window.__cablemanagementDraw?.get('f' + i.fid)
   return { connecting: lc.isConnecting, start: d ? [d[0], d[1]] : null }
 }, { ...ids, fid: setup?.fid })
 ok('unrelated drag is live', mid.connecting === true)
@@ -81,7 +81,7 @@ const after = await page.evaluate(async i => {
   const g = window.app.graph
   window.app.canvas.linkConnector.reset?.(true)
   for (let k = 0; k < 3; k++) { g.setDirtyCanvas(true, true); await new Promise(res => setTimeout(res, 150)) }
-  const d = window.__cablemanagementDraw?.get(i.fid)
+  const d = window.__cablemanagementDraw?.get('f' + i.fid)
   return d ? [d[0], d[1]] : null
 }, { fid: setup?.fid })
 ok('float pin-anchored after reset', after && setup?.start && Math.hypot(after[0] - setup.start[0], after[1] - setup.start[1]) < 2, JSON.stringify(after))

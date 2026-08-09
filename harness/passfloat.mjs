@@ -159,7 +159,7 @@ await settle()
 st = await page.evaluate((i) => {
   const g = window.app.graph
   const floats = [...g.floatingLinks.values()]
-  const draw = floats.length ? window.__cablemanagementDraw?.get?.(floats[0].id) : null
+  const draw = floats.length ? window.__cablemanagementDraw?.get?.('f' + floats[0].id) : null
   return {
     floating: floats.length,
     prim: !!g.nodes.find((n) => n.type === 'PrimitiveNode'),
@@ -217,7 +217,7 @@ await settle()
 st = await page.evaluate((i) => {
   const g = window.app.graph
   const floats = [...g.floatingLinks.values()]
-  const draw = floats.length ? window.__cablemanagementDraw?.get?.(floats[0].id) : null
+  const draw = floats.length ? window.__cablemanagementDraw?.get?.('f' + floats[0].id) : null
   const B2 = g.getNodeById(Number(i.B2))
   return {
     floating: floats.length,

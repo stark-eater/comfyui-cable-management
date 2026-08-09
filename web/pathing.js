@@ -219,6 +219,18 @@ function tryDropSeams() {
             const d = Math.hypot(rr.pos[0] - event.canvasX, rr.pos[1] - event.canvasY);
             if (d < bd) { bd = d; r = rr; }
           }
+          // Polarity no-op at THIS seam too: Vue tooth-releases funnel here
+          // (the blinded Reroute methods starve Vue's direct path), and the
+          // empty-canvas fall-through would DISCONNECT a carried link --
+          // the ruling says nothing changes, so consume for a snap-back.
+          {
+            const t = r ? toothOf(r.id) : null;
+            const to = lc.state?.connectingTo;
+            if (t && ((t.side === "out" && to === "input") || (t.side === "in" && to === "output"))) {
+              lc.renderLinks.length = 0;
+              return;
+            }
+          }
           if (r && lc.isRerouteValidDrop?.(r)) {
             lc.dropOnReroute(r, event);
             g.setDirtyCanvas(true, true);
@@ -268,6 +280,22 @@ function tryDropSeams() {
         if (event && reroute && activeGraph(app) && isEnabled()) {
           try {
             if (handleGateInDrop(app, lc, event, reroute)) return;
+            // Polarity no-ops (RULING: 'there is no output-to-output drop --
+            // output-to-output and input-to-input are noops by force of
+            // logic, both for core and for us'). Teeth pose as naked
+            // reroutes, and core's reroute drop happily performs chain
+            // surgery for a mismatched drag (measured: a destination-seeking
+            // drag released on a ribbon.output pin rewrites the tooth's
+            // parentId and decomposes the whole comb). Consume instead: the
+            // wire snaps back untouched -- reset() restores hidden moved
+            // links from its own inputLinks/outputLinks lists, not
+            // renderLinks, so emptying renderLinks cancels cleanly.
+            const t = toothOf(reroute.id);
+            const to = lc.state?.connectingTo;
+            if (t && ((t.side === "out" && to === "input") || (t.side === "in" && to === "output"))) {
+              lc.renderLinks.length = 0;
+              return;
+            }
           } catch (err) {
             console.warn("cablemanagement: gate-pin drop failed", err);
           }
@@ -283,6 +311,48 @@ function tryDropSeams() {
       undimPins();
       undimCoreSlots();
     });
+    // Teeth must be OPAQUE to core's reroute-drop resolution. The Vue drop
+    // path never reaches the connector seams above: useSlotLinkInteraction
+    // resolves the reroute from the layout store (a module singleton we
+    // cannot reach) and calls renderLink.connectToReroute* DIRECTLY --
+    // measured: a pickup at B.input released on a ribbon.output pin ran
+    // rl.connectToRerouteInput(tooth) with no drop* seam firing, rewrote the
+    // tooth's parentId, and decomposed the whole comb. Both that path and
+    // core's own dropOnReroute/isRerouteValidDrop resolve their targets
+    // through two Reroute methods, so the starve happens there:
+    //   - findTargetInputs: blind for EVERY tooth. Valid in-pin drops are
+    //     handleGateInDrop's business (core's swap would skip provenance and
+    //     the donor kill); out-pin destination drops are polarity no-ops.
+    //   - findSourceOutput: blind for IN teeth only (source-seeking drops on
+    //     ribbon.input are polarity no-ops); OUT teeth keep it -- that is
+    //     the working branch/bundle gesture ('B joins the lane's
+    //     destinations'), on both the Vue and legacy paths.
+    // Starved, Vue falls through to dropOnCanvas -> the wraps above decide.
+    // EXEMPTION: a drag's OWN fromReroute resolves normally -- the in-tooth
+    // resume/re-feed gesture lands via ToOutputFromRerouteLink.connectToOutput
+    // -> _connectOutputToReroute(fromReroute) -> findTargetInputs on the very
+    // tooth the drag was pulled from (measured: blinding it broke the re-feed;
+    // toothmods s6). Only FOREIGN drags find teeth opaque.
+    const ownReroute = (rid) => {
+      const lc2 = app.canvas?.linkConnector;
+      return !!lc2?.renderLinks?.some?.((rl) => rl.fromReroute?.id === rid);
+    };
+    const Reroute = window.LiteGraph?.Reroute;
+    if (Reroute?.prototype && !Reroute.prototype.__cablemanagementOpaque) {
+      Reroute.prototype.__cablemanagementOpaque = true;
+      const origTargets = Reroute.prototype.findTargetInputs;
+      Reroute.prototype.findTargetInputs = function (...a) {
+        if (isEnabled() && toothOf(this.id) && !ownReroute(this.id)) return [];
+        return origTargets.apply(this, a);
+      };
+      const origSource = Reroute.prototype.findSourceOutput;
+      Reroute.prototype.findSourceOutput = function (...a) {
+        if (isEnabled() && toothOf(this.id)?.side === "in" && !ownReroute(this.id)) return null;
+        return origSource.apply(this, a);
+      };
+    } else if (!Reroute) {
+      console.warn("[cablemanagement] LiteGraph.Reroute missing; tooth drops may fall through to core reroute surgery");
+    }
     installPinDrops(app);
   }
   return true;

@@ -12,7 +12,7 @@
 // uses (dropOnNothing and dropOnNode instance wraps in pathing.js).
 import { activeGraph, nodeFromId, originOf } from "./graph.js";
 import { materialise, ownerOf, reapIfUnused } from "./primitive.js";
-import { recordProvenance, recordGateProvenance } from "./reanchor.js";
+import { recordProvenance, recordGateProvenance, settleCarriedLink } from "./reanchor.js";
 import { stitchGates, isStitch } from "./stitch.js";
 import { invalidate, anchorOf } from "./ledger.js";
 import { combAt, laneAt, toothOf, laneEnds, typeMatch } from "./pathing/combs.js";
@@ -167,11 +167,12 @@ export function handleGateInDrop(app, lc, event, viaReroute) {
     const srcNode = rl.node;
     const srcIdx = srcNode?.outputs?.indexOf?.(rl.fromSlot);
     if (srcNode == null || srcIdx == null || srcIdx < 0) continue;
+    let rlDid = false;
     for (const t of targets) {
       if (!typeMatch(rl.fromSlot?.type, t.node.inputs[t.slot]?.type)) continue;
       const link = srcNode.connect(srcIdx, t.node, t.slot, lane.out);
       if (link) {
-        did = true;
+        rlDid = did = true;
         if (pin) recordProvenance(t.node, t.slot, pin.host, pin.index, link.id);
       }
     }
@@ -184,8 +185,13 @@ export function handleGateInDrop(app, lc, event, viaReroute) {
       graph.addFloatingLink(next); // FIRST: the old float is all that holds the teeth
       graph.removeFloatingLink?.(f);
       hung = next;
-      did = true;
+      rlDid = did = true;
     }
+    // A drag CARRYING an existing link (core pickup at the target end) that
+    // just landed here is a MOVE: the donor input empties (QA: 'replaces X2
+    // correctly but A->B remains unmodified' -- ruled: all of those
+    // interactions kill A->B).
+    if (rlDid) settleCarriedLink(graph, rl);
   }
   if (!did) return false;
   // Core retires floats whose terminus is the chain's LAST reroute; a float
