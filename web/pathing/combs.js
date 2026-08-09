@@ -13,7 +13,8 @@
 // PoC surface: programmatic API only (window.__cablemanagementCombs). Gestures come after.
 import { offsetStrand, route } from './router.js'
 import { activeGraph, nodeFromId } from '../graph.js'
-import { migrateFloatFrom, settleCarriedLink } from '../reanchor.js'
+import { carriedLinkOf, migrateFloatFrom, provenanceOf, recordProvenance, settleCarriedLink } from '../reanchor.js'
+import { routeSrc, unclaim } from '../routestore.js'
 
 const KEY = 'cablemanagement_combs'
 const GATE_W = 24 // gate body width; the pin->lane fan hides inside it
@@ -478,6 +479,59 @@ const sharesLink = (a, b) => {
   return false
 }
 
+// ---- same-source lane join (#4) --------------------------------------------------
+// Merging a wire whose source a ribbon already carries must not mint a twin lane:
+// the wire joins the EXISTING lane and forks at the ribbon output pin. "Same
+// source" is exact: same real origin pin AND same apparent source -- two wires
+// from one true origin but drawn from different pass-through pins read as
+// different sources to the user and stay separate lanes.
+const sameSrc = (a, b) =>
+  (a == null && b == null) ||
+  (a != null && b != null && String(a[0]) === String(b[0]) && Number(a[1]) === Number(b[1]))
+
+function laneWithSource(graph, comb, originId, originSlot, apparent) {
+  for (const lane of comb.lanes) {
+    const t = graph.reroutes.get(lane.in)
+    const ll = t?.firstLink
+    if (!ll || String(ll.origin_id) !== String(originId) || ll.origin_slot !== originSlot) continue
+    const lsrc = routeSrc(graph, lane.in) ?? routeSrc(graph, lane.out) ?? null
+    if (sameSrc(lsrc, apparent)) return lane
+  }
+  return null
+}
+
+// Fold an enrolled reroute's wires into a matching lane: every rider reconnects
+// through the lane's teeth (core connect replaces the occupied input and retires
+// the old chain), provenance re-records under the new link ids when the lane
+// draws from a pass-through pin, and the now-wireless dot goes. Returns false --
+// caller falls through to a plain enroll -- when the reroute carries floats, a
+// mixed-origin manifold, or no lane matches.
+function joinLane(graph, comb, reroute) {
+  if (reroute.floatingLinkIds?.size) return false
+  const ids = [...(reroute.linkIds ?? [])]
+  if (!ids.length) return false
+  const links = ids.map((id) => (graph.getLink ? graph.getLink(id) : graph._links?.get?.(id))).filter(Boolean)
+  if (links.length !== ids.length) return false
+  const o = links[0]
+  if (!links.every((l) => String(l.origin_id) === String(o.origin_id) && l.origin_slot === o.origin_slot)) return false
+  const apparent = routeSrc(graph, reroute.id) ?? null
+  const lane = laneWithSource(graph, comb, o.origin_id, o.origin_slot, apparent)
+  if (!lane) return false
+  const srcNode = graph.getNodeById(o.origin_id) ?? graph.getNodeById(Number(o.origin_id))
+  if (!srcNode) return false
+  const host = apparent && (graph.getNodeById(apparent[0]) ?? graph.getNodeById(Number(apparent[0])))
+  for (const l of links) {
+    const t = graph.getNodeById(l.target_id) ?? graph.getNodeById(Number(l.target_id))
+    if (!t) continue
+    const nl = srcNode.connect(l.origin_slot, t, l.target_slot, lane.out)
+    if (nl && host) recordProvenance(t, l.target_slot, host, Number(apparent[1]), nl.id)
+  }
+  unclaim(graph, 'reroutes', reroute.id)
+  unclaim(graph, 'floats', reroute.id)
+  if (graph.reroutes?.has?.(reroute.id)) graph.removeReroute(reroute.id)
+  return true
+}
+
 // Reroute dropped onto a reroute: comb is born at the drop point, gates adjacent
 // and touching on the ribbon side. The dot that was already there takes lane 0.
 export function gestureCreate(graph, target, dragged) {
@@ -506,6 +560,10 @@ export function gestureEnroll(graph, comb, reroute) {
     const t = graph.reroutes.get(l.in)
     if (t && sharesLink(t, reroute)) return false
   }
+  if (joinLane(graph, comb, reroute)) {
+    layout(graph, comb)
+    return true
+  }
   const ok = absorb(graph, comb, reroute)
   if (ok) layout(graph, comb)
   return ok
@@ -526,6 +584,28 @@ export function gestureFloatingEnroll(graph, lc, comb) {
   for (const rl of rls) {
     if (!rl?.node?.connectFloatingReroute || !rl.fromSlot) continue
     if (rl.toType !== 'input' && rl.toType !== 'output') continue
+    // A drag CARRYING an existing link whose source this ribbon already runs
+    // (#4 join rule): the wire joins the matching lane -- consumer reconnects
+    // through the teeth, forking at the ribbon output pin -- instead of
+    // parking a twin floating lane. connect() replaces the occupied input, so
+    // the donor link dies with the swap; provenance follows the lane.
+    const carried = carriedLinkOf(graph, rl)
+    if (carried) {
+      const tNode = graph.getNodeById(carried.target_id) ?? graph.getNodeById(Number(carried.target_id))
+      const rec = tNode && provenanceOf(tNode, carried.target_slot, graph)
+      const apparent = rec ? [String(rec[0]), Number(rec[1])] : null
+      const lane = laneWithSource(graph, comb, carried.origin_id, carried.origin_slot, apparent)
+      const srcNode = lane && (graph.getNodeById(carried.origin_id) ?? graph.getNodeById(Number(carried.origin_id)))
+      if (srcNode && tNode) {
+        const nl = srcNode.connect(carried.origin_slot, tNode, carried.target_slot, lane.out)
+        if (nl) {
+          const host = apparent && (graph.getNodeById(apparent[0]) ?? graph.getNodeById(Number(apparent[0])))
+          if (host) recordProvenance(tNode, carried.target_slot, host, Number(apparent[1]), nl.id)
+          made = true
+          continue
+        }
+      }
+    }
     const terminus = rl.node.connectFloatingReroute([0, 0], rl.fromSlot, rl.fromReroute?.id)
     if (!terminus) continue
     const rIn = mint(graph, terminus)

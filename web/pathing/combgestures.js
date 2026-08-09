@@ -659,6 +659,12 @@ export function installGestures(app, active) {
         // before the deferred removal lands (measured: freed dot parked ON the pin
         // slot, overlapping the next lane's tooth and poisoning the next grab).
         if (t.side === 'in') {
+          // Dropped back on its own in-gate (#4 ruling): the peel is aborted,
+          // not completed -- the lane stays enrolled and the next combPass
+          // snaps the tooth home. Detaching here left the user with a freed
+          // dot sitting exactly where the lane used to be (2g QA).
+          const at = combAt(g, x, y)
+          if (at && at.comb === t.comb && at.which === 'in') return
           detachLane(g, t.comb, p.rid)
           g.setDirtyCanvas(true, true)
         }
