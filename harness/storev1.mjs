@@ -173,6 +173,45 @@ await page.waitForTimeout(2600)
     !!r.reloadedClaims && JSON.stringify(r.reloadedClaims) === JSON.stringify(r.claims), JSON.stringify(r.reloadedClaims))
 }
 
+// ---- s7: adoption-time defect detection ----
+{
+  const r = await page.evaluate(async () => {
+    const g = window.app.graph, L = window.LiteGraph; g.clear()
+    const A = L.createNode('EmptyLatentImage'); A.pos = [150, 100]; g.add(A)
+    const K = L.createNode('KSampler'); K.pos = [700, 100]; g.add(K)
+    const idx = K.inputs.findIndex((s) => s.name === 'latent_image')
+    const link = A.connect(0, K, idx)
+    const R = g.createReroute([450, 150], link)
+    await new Promise((x) => setTimeout(x, 600))
+    // A v0 bag: one claim fully alive, one on a dead reroute, one naming a
+    // dead host, one float on a dead reroute.
+    g.extra ??= {}
+    g.extra.cablemanagement_routefrom = {
+      [String(R.id)]: [String(A.id), 0],
+      '9999': [String(A.id), 0],
+      [String(R.id + 1000)]: ['777', 0],
+    }
+    g.extra.cablemanagement_routefrom[String(R.id)] = [String(A.id), 0]
+    g.extra.cablemanagement_floatfrom = { '9998': [String(A.id), 0] }
+    // Also a live-reroute claim whose HOST is dead -- must drop too.
+    const R2 = g.createReroute([500, 250], link)
+    g.extra.cablemanagement_routefrom[String(R2.id)] = ['777', 3]
+    const bag = window.__cablemanagement.routes(g)
+    return {
+      rClaims: Object.keys(bag.claims.reroutes),
+      fClaims: Object.keys(bag.claims.floats),
+      routes: Object.keys(bag.routes).length,
+      keptSrc: bag.routes[bag.claims.reroutes[String(R.id)]]?.src ?? null,
+      R: String(R.id),
+      legacyGone: !g.extra.cablemanagement_routefrom && !g.extra.cablemanagement_floatfrom,
+    }
+  })
+  ok('s7: adoption keeps the living claim verbatim',
+    r.rClaims.length === 1 && r.rClaims[0] === r.R && JSON.stringify(r.keptSrc?.[1]) === '0', JSON.stringify(r))
+  ok('s7: dead-carrier and dead-host claims detected and dropped, routes died with them',
+    r.fClaims.length === 0 && r.routes === 1 && r.legacyGone, JSON.stringify(r))
+}
+
 // ---- s5: no-create discipline ----
 {
   const r = await page.evaluate(async () => {

@@ -59,6 +59,12 @@ Legacy (v0) shapes -- `cablemanagement_routefrom`, `cablemanagement_floatfrom`,
 first touch: each entry becomes its own single-claim route (no grouping or
 intent is inferred), the legacy keys are removed, and they are never written
 again. Routes with more than one claim only emerge from fresh gestures.
+Adoption then runs a defect check against the graph itself: v0 could not
+guarantee its annotations matched the graph, so any translated claim whose
+carrier (reroute / gate link) or source host provably no longer exists is
+dropped and reported to the console. This is detection against graph truth,
+not reinterpretation -- nothing that still references living objects is
+touched.
 
 ## graph.extra.cablemanagement_combs (v1, carried over unchanged)
 

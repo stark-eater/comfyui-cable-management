@@ -35,8 +35,56 @@ function bagOf(graph, create = false) {
   if (!x?.[KEY] && !hasLegacy && !create) return null;
   x ??= graph.extra = {};
   const bag = (x[KEY] ??= { v: 1, seq: 1, routes: {}, claims: { reroutes: {}, floats: {}, gatelinks: {} } });
-  if (hasLegacy) adapt(x, bag);
+  if (hasLegacy) {
+    adapt(x, bag);
+    scrubAdopted(graph, bag);
+  }
   return bag;
+}
+
+/**
+ * Adoption-time defect detection (RULING: 'while adopting a v0 workflow v1
+ * should detect that type of a defect'). v0 could not guarantee the
+ * annotation layer matched the graph -- a claim can outlive its carrier
+ * reroute/link or its source host, describing a route with nothing left
+ * alive. Translation stays verbatim; THIS pass then drops every claim the
+ * graph itself proves dead, and says so. Checks run only where the graph can
+ * answer them (a bare {extra} object adapts untouched -- there is no truth
+ * to check against).
+ */
+function scrubAdopted(graph, bag) {
+  const canReroute = !!(graph.reroutes?.get || graph.getReroute);
+  const canLink = !!(graph.getLink || graph._links?.get);
+  const canNode = typeof graph.getNodeById === "function";
+  if (!canReroute && !canLink && !canNode) return;
+  const liveReroute = (id) =>
+    !canReroute || !!(graph.getReroute?.(Number(id)) ?? graph.reroutes?.get?.(Number(id)));
+  const liveLink = (id) => {
+    if (!canLink) return true;
+    const l = graph.getLink ? graph.getLink(Number(id)) : graph._links?.get?.(Number(id));
+    return !!l && (l.targetIsIoNode ?? String(l.target_id) === "-20");
+  };
+  const liveNode = (id) => !canNode || !!(graph.getNodeById(id) ?? graph.getNodeById(Number(id)));
+  const dropped = { reroutes: 0, floats: 0, gatelinks: 0 };
+  const liveCarrier = { reroutes: liveReroute, floats: liveReroute, gatelinks: liveLink };
+  for (const kind of KINDS) {
+    const claims = bag.claims[kind];
+    for (const id of Object.keys(claims)) {
+      const rid = claims[id];
+      const src = bag.routes[rid]?.src ?? null;
+      if (liveCarrier[kind](id) && (src == null || liveNode(src[0]))) continue;
+      delete claims[id];
+      dropIfUnclaimed(bag, rid);
+      dropped[kind]++;
+    }
+  }
+  const total = dropped.reroutes + dropped.floats + dropped.gatelinks;
+  if (total) {
+    console.info(
+      `[cablemanagement] v0 adoption: dropped ${total} claim(s) with no living justification`,
+      dropped
+    );
+  }
 }
 
 /** Verbatim v0 -> v1: one single-claim route per legacy entry, keys removed. */
