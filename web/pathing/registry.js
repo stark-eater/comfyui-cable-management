@@ -370,6 +370,24 @@ export function routeFor(canvas, linkData) {
   // Gate pins rank like a node side too (works for floating segments -- no llink).
   if (tS?.side === 'out') stubStart = gateStub(g, tS)
   if (tE?.side === 'in') stubEnd = gateStub(g, tE)
+  // Facing endpoints closer than their combined stub depth: deep lane ladders
+  // (STUB + rank*PITCH, ~100px on wide sides) overshoot a short gap, the stub
+  // tips cross, and A* folds a 4-bend loop around them (measured: 115px gap,
+  // 500px of wire, one self-crossing per link). Scale both stubs to fit the
+  // gap, preserving their ratio so lane order survives the squeeze.
+  if (stubStart + stubEnd > 0) {
+    const svx = sDir === 'right' ? 1 : sDir === 'left' ? -1 : 0
+    const svy = sDir === 'down' ? 1 : sDir === 'up' ? -1 : 0
+    const facing =
+      (svx && eDir === (svx > 0 ? 'left' : 'right') && (e.x - s.x) * svx > 0 && (e.x - s.x) * svx < stubStart + stubEnd) ||
+      (svy && eDir === (svy > 0 ? 'up' : 'down') && (e.y - s.y) * svy > 0 && (e.y - s.y) * svy < stubStart + stubEnd)
+    if (facing) {
+      const gap = svx ? Math.abs(e.x - s.x) : Math.abs(e.y - s.y)
+      const k = gap / (stubStart + stubEnd)
+      stubStart = Math.max(1, Math.floor(stubStart * k))
+      stubEnd = Math.max(1, Math.floor(stubEnd * k))
+    }
+  }
   const key = `${linkData.id}|${s.x | 0}|${s.y | 0}|${e.x | 0}|${e.y | 0}|${stubStart}|${stubEnd}|${sDir}>${eDir}`
   const hit = cache.get(key)
   if (hit && hit.version === version) {

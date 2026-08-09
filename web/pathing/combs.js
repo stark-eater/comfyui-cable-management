@@ -220,7 +220,10 @@ export function crossingPts(graph, comb, lane, obstacles, clearance, version) {
   // opposed-dirs check but show a negative gap -- that shape must keep the
   // router wrap (flip round). Small negative slack covers facing gates dragged
   // into bodily overlap, where the wrap would flash back mid-drag.
-  if (dirOut === -dirIn && gap >= -GATE_W && gap < 2 * (clearance + halfRibbon)) {
+  // Upper bound = the room the template's face stubs need (24 + halfRibbon per
+  // side, matching the route() call below): a gap the stubs cannot fit makes
+  // the template itself fold, so the seam takes over exactly there.
+  if (dirOut === -dirIn && gap >= -GATE_W && gap < 2 * (24 + halfRibbon)) {
     if (Math.abs(a[1] - b[1]) < 0.1) {
       mid = [a, b]
     } else {
@@ -241,6 +244,12 @@ export function crossingPts(graph, comb, lane, obstacles, clearance, version) {
         endDir: go.ribbonDir, // stub extends outward from the out-gate's ribbon face
         obstacles,
         clearance: clearance + halfRibbon,
+        // Strands offset perpendicular from the template by up to halfRibbon;
+        // with the default 24px stub a wide ribbon's inner strands folded back
+        // THROUGH the gate body (measured: 20 lanes = 76px offset vs 24px
+        // stub). The face stubs must clear the ribbon's own width too.
+        stubStart: 24 + halfRibbon,
+        stubEnd: 24 + halfRibbon,
         enforceStart: true, // gate faces are binding (flip round)
         enforceEnd: true
       })
