@@ -284,12 +284,15 @@ function laneStub(graph, node, isInput, slot) {
   return STUB + lane * STUB_PITCH
 }
 
-export function routeFor(canvas, linkData) {
+export function routeFor(canvas, linkData, pcb = true) {
   const s = linkData.startPoint, e = linkData.endPoint
   const g = canvas.graph
   const llink = g?._links?.get?.(Number(linkData.id))
   const sIsPin = linkData.startDirection !== 'none'
   const eIsPin = linkData.endDirection !== 'none'
+  // Mixed modes: outside PCB only comb crossings become traces, and a crossing has
+  // reroutes (teeth) at BOTH ends -- pin-to-pin segments bail before any memo work.
+  if (!pcb && sIsPin && eIsPin) return null
   if (llink) {
     let pm = pinMemo.get(Number(linkData.id))
     if (!pm) pinMemo.set(Number(linkData.id), (pm = {}))
@@ -335,6 +338,9 @@ export function routeFor(canvas, linkData) {
       cache.set(key, entry)
       return raw ? entry : null
     }
+    // Not a crossing: outside PCB the segment renders natively (spline/linear/
+    // straight through the teeth), no stub or A* work.
+    if (!pcb) return null
     // A tooth's faces are fixed by its gate's orientation; free reroutes resolve
     // from the upstream-side rule.
     const toothDir = (t, atEnd) => {

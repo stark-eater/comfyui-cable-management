@@ -179,6 +179,11 @@ Pathing suite (PCB link render mode -- see PATHING.md):
 - `gatechrome.mjs` -- hover control column: sort modal (comfy dialog store,
   drag rows, Apply reorders lanes comb-wide), per-ribbon collapse/expand
   (stacked teeth, single-line ribbon), shift-drag grid snap, pointer cursor
+- `mixedmode.mjs` -- ribbons in every link render mode: only comb crossings
+  route in spline mode, gestures live, "+" enroll, PCB<->spline round-trip
+- `combclip.mjs` -- clipboard survival: full-selection paste rebuilds the comb,
+  partial selections synthesize floating lanes (parked / hanging), fully
+  unselected lanes drop and a single survivor decomposes
 - `pathing-stress.mjs` -- PCB mode over all real workflows, zero page errors
 - `pathing-spike-patchpoints.mjs` / `pathing-spike-postpass.mjs` -- the original
   feasibility spikes (patch-point presence/counters; cull post-pass render)

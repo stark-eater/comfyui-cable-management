@@ -18,6 +18,7 @@ import { app } from "../../scripts/app.js";
 import { beginFrame, debugRoutes, routeFor, stats } from "./pathing/registry.js";
 import { clearOverlay, combAt, drawGates, firstMatchingLane, gestureFloatingEnroll, installApi, toothOf } from "./pathing/combs.js";
 import { installGestures } from "./pathing/combgestures.js";
+import { installClipboard } from "./pathing/combclipboard.js";
 import { emit, pointAt } from "./pathing/trace.js";
 import { handlePinDrop, handleGateInDrop, installPinDrops, undimPins, undimCoreSlots } from "./drops.js";
 import { activeGraph } from "./graph.js";
@@ -26,9 +27,18 @@ import { isEnabled } from "./enabled.js";
 const state = { patched: false, option: false, PCB: 3 };
 
 function active() {
-  // The master toggle gates ALL of pathing -- routing, gates, gestures -- not just
-  // the ledger-styled parts: off must mean stock rendering even in PCB mode.
+  // PCB AESTHETICS only -- A* for plain links, decollision, sticking, straightening.
+  // Off must mean stock rendering even in PCB mode (master toggle), and other link
+  // modes keep their native geometry for everything that is not a ribbon.
   return isEnabled() && app.canvas && app.canvas.links_render_mode === state.PCB;
+}
+
+function combsOn() {
+  // RIBBON MACHINERY -- combPass, gates, gestures, the gate->gate trace -- runs in
+  // EVERY link render mode (mixed-modes ruling: ribbons always on; the ribbon's
+  // internal run stays PCB-drawn, outer segments follow the native mode). The long
+  // game is a separate `ribbon mode` choice; this predicate is that seam.
+  return isEnabled() && app.canvas;
 }
 
 function pickSentinel() {
@@ -52,11 +62,11 @@ function tryPatch() {
 
   const origDrawConnections = canvasProto.drawConnections;
   canvasProto.drawConnections = function (ctx) {
-    const pcb = this === app.canvas && this.links_render_mode === state.PCB && isEnabled();
+    const on = this === app.canvas && isEnabled();
     // A throw escaping drawConnections leaves core's is_rendering flag stuck and the
     // canvas dead for the session -- same failure class as drawLink below. The comb
     // records are workflow data; nothing they contain may take the render loop down.
-    if (pcb) {
+    if (on) {
       try {
         beginFrame(this);
       } catch (err) {
@@ -67,7 +77,7 @@ function tryPatch() {
     // Gates paint over the links so the pin->lane fan stays inside the body;
     // selected gates go to the overlay canvas above the node DOM instead.
     try {
-      if (pcb) drawGates(ctx, this.graph, this);
+      if (on) drawGates(ctx, this.graph, this);
       else clearOverlay();
     } catch (err) {
       console.warn("cablemanagement combs: gate draw failed", err);
@@ -77,12 +87,14 @@ function tryPatch() {
 
   const origDrawLink = prProto.drawLink;
   prProto.drawLink = function (ctx, linkData, context) {
-    if (active() && linkData.id !== "temp" && linkData.id !== "dragging") {
+    if (combsOn() && linkData.id !== "temp" && linkData.id !== "dragging") {
       // A throw escaping drawLink KILLS core's render loop permanently (measured:
       // one bad route froze the canvas for the rest of the session). Spline
       // fallback for that link, loudly, and the loop survives.
       try {
-        const r = routeFor(app.canvas, linkData);
+        // Outside PCB mode routeFor serves comb crossings only -- the ribbon's
+        // gate->gate run stays a trace, everything else renders natively.
+        const r = routeFor(app.canvas, linkData, active());
         if (r) {
           linkData.__route = r;
           // Ribbon segments carry no centre marker -- one dot per lane stacked on a
@@ -141,18 +153,18 @@ function tryPatch() {
     const origRDraw = RR.prototype.draw;
     const origRSlots = RR.prototype.drawSlots;
     RR.prototype.draw = function (...a) {
-      if (active() && toothOf(this.id)) return;
+      if (combsOn() && toothOf(this.id)) return;
       return origRDraw.apply(this, a);
     };
     RR.prototype.drawSlots = function (...a) {
-      if (active() && toothOf(this.id)) return;
+      if (combsOn() && toothOf(this.id)) return;
       return origRSlots?.apply(this, a);
     };
   }
 
   state.patched = true;
   installApi(app); // window.__cablemanagementCombs -- programmatic comb surface
-  installGestures(app, active);
+  installGestures(app, combsOn);
   return true;
 }
 
@@ -195,7 +207,7 @@ function tryDropSeams() {
           // A drag the gate-pin handler already consumed must not reach the
           // release menu or core's drop stages -- there is nothing left to drop.
           if (lc.__cablemanagementGateDone) return;
-          if (active()) {
+          if (state.patched) {
             // Source drag onto an IN gate pin: connect through that lane (drops.js).
             if (handleGateInDrop(app, lc, event)) return;
             const hit = combAt(g, event.canvasX, event.canvasY);
@@ -413,7 +425,7 @@ function tryOption() {
 window.addEventListener(
   "pointerup",
   () => {
-    if (!active()) return;
+    if (!combsOn()) return;
     requestAnimationFrame(() => requestAnimationFrame(() => {
       // Active graph: the canvas re-registers to the subgraph on entry, so the ROOT
       // graph's setDirtyCanvas reaches no canvas at all from inside one.
@@ -426,6 +438,7 @@ window.addEventListener(
 let patchTries = 0;
 const timer = setInterval(() => {
   if (!state.seams) state.seams = tryDropSeams();
+  if (!state.clipboard) state.clipboard = installClipboard();
   if (!state.patched) {
     tryPatch();
     // The gate is a TS-private property (linkRenderer.pathRenderer); if a frontend
@@ -435,7 +448,7 @@ const timer = setInterval(() => {
     }
   }
   if (state.patched && !state.option) tryOption();
-  if (state.patched && state.option && state.seams) clearInterval(timer);
+  if (state.patched && state.option && state.seams && state.clipboard) clearInterval(timer);
 }, 200);
 
 window.__cablemanagementPathing = { state, stats, routes: debugRoutes, PCB: () => state.PCB };

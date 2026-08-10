@@ -658,6 +658,9 @@ function mint(graph, before) {
   return r
 }
 
+// Clipboard survival (combclipboard.js) rebuilds records outside this module.
+export { mint as mintTooth, records as combRecords, layout as layoutComb }
+
 // Replace a free reroute with a tooth pair inheriting its chain slot AND its whole
 // linkIds set -- a junction reroute becomes one lane feeding all its branches, so
 // manifold fan-out survives enrollment.

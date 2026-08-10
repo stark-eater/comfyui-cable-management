@@ -88,6 +88,12 @@ Ribbon combs: gate-pair groupings over native reroutes ("teeth").
   derived at runtime, never serialized.
 - Deleting the record (or disabling the extension) leaves the teeth as plain
   reroutes and every link connected: the ribbon decomposes, the wiring stays.
+- Clipboard: copies spanning a ribbon carry a `cablemanagement_combs` key on
+  the CLIPBOARD object (not graph.extra) -- gate geometry plus, per lane,
+  either `full` (both teeth serialized alongside, remapped on paste) or
+  `float: 'src'|'tgt'` with the one connected pin (a floating lane is
+  synthesized on paste). Stock frontends ignore the key; such a paste
+  flattens to plain wires, same as pre-clipboard-support behavior.
 
 ## Node-carried records (v1, in `node.properties`)
 
