@@ -416,7 +416,9 @@ export function routeFor(canvas, linkData) {
     enforceStart: !!tS,
     enforceEnd: !!tE,
     // Shadow standoff, quantized like clearance so lanes stay on-grid.
-    vPad: grid ? Math.ceil(8 / grid) * grid : 8
+    vPad: grid ? Math.ceil(8 / grid) * grid : 8,
+    // Near-straight fallback: a jog thinner than the stroke is drawing noise.
+    flatTol: canvas.connections_width ?? 3
   })
   const entry = raw
     ? {

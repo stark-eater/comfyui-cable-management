@@ -46,8 +46,11 @@ const out = await page.evaluate(async () => {
   // at most one tiny end-jog -- no excursion around the crowder. Two phases: measure
   // the corridor first, then rebuild with the crowder at final coordinates (post-hoc
   // pos writes do not reliably reach the DOM).
+  // The far end sits 8px off: dead-level pins now take the flatTol spline
+  // fallback (straightening rule -- jog thinner than the stroke = no route),
+  // so the corridor probe needs a jog big enough to route yet still tight.
   g.clear()
-  const mA = mk('Reroute', 100, 300), mB = mk('Reroute', 900, 300)
+  const mA = mk('Reroute', 100, 300), mB = mk('Reroute', 900, 308)
   const mC = mk('CLIPTextEncode', 420, 700)
   mA.connect(0, mB, 0)
   await settle()
@@ -60,7 +63,7 @@ const out = await page.evaluate(async () => {
     band = [Math.min(startY, endY), Math.max(startY, endY)]
 
     g.clear()
-    const A = mk('Reroute', 100, 300), B = mk('Reroute', 900, 300)
+    const A = mk('Reroute', 100, 300), B = mk('Reroute', 900, 308)
     const C = mk('CLIPTextEncode', 420, band[1] + 8 + titleDelta)
     A.connect(0, B, 0)
     await settle()
@@ -73,7 +76,15 @@ const out = await page.evaluate(async () => {
     cPts = rc ? rc.pts : 'trivial' // null route = core renders it straight, equally fine
   }
 
-  return { a, cPts, band, fixtureOk }
+  // Scene F (straightening rule): dead-level pins -- vertical difference under
+  // the stroke width -- must NOT route at all (spline fallback reads straight).
+  g.clear()
+  const fA = mk('Reroute', 100, 300), fB = mk('Reroute', 900, 300)
+  fA.connect(0, fB, 0)
+  await settle()
+  const flatRoutes = P.routes().length
+
+  return { a, cPts, band, fixtureOk, flatRoutes }
 })
 
 let pass = true
@@ -90,6 +101,8 @@ else if (Array.isArray(out.cPts)) {
 }
 if (!out.fixtureOk || !cOk) pass = false
 console.log(`C: fixture=${out.fixtureOk} route=${out.cPts === 'trivial' ? 'trivial straight' : JSON.stringify(out.cPts)}`)
+if (out.flatRoutes !== 0) pass = false
+console.log(`F: flat link routes=${out.flatRoutes} (want 0 -- spline fallback)`)
 console.log(`   (want: stays inside pin band [${out.band?.map((v) => v.toFixed(1))}], <=4 points)`)
 
 console.log('page errors:', errs.length ? errs : 'none')

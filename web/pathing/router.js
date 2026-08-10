@@ -27,7 +27,7 @@ const DIR = {
   none: [1, 0]
 }
 
-export function route({ start, end, startDir = 'right', endDir = 'left', obstacles, clearance = 16, stubStart = 24, stubEnd = 24, enforceStart = false, enforceEnd = false, vPad = 0 }) {
+export function route({ start, end, startDir = 'right', endDir = 'left', obstacles, clearance = 16, stubStart = 24, stubEnd = 24, enforceStart = false, enforceEnd = false, vPad = 0, flatTol = 0 }) {
   // Reroute ends (core passes CENTER -> 'none') are resolved by the registry to the
   // upstream's side before this call; the mapping here is only a fallback.
   const sv = DIR[startDir === 'none' ? 'right' : startDir] ?? DIR.right
@@ -64,9 +64,13 @@ export function route({ start, end, startDir = 'right', endDir = 'left', obstacl
   // runs THROUGH the gate body against the stub direction, and the shortcut made
   // flips appear to do nothing unless the layout already forced a wrap (QA
   // find). Non-canonical dirs always take the full search, which honours the stubs.
+  // flatTol (Barney's straightening rule): endpoints within the link stroke's
+  // thickness of colinear fall back to the spline too -- a jog smaller than the
+  // line is drawing noise, and the near-flat spline reads as a straight wire.
   if (
     sv[0] === 1 && ev[0] === -1 &&
-    eStub[0] - sStub[0] > EPS && clearH(sStub[1], sStub[0], eStub[0], rects) && Math.abs(sStub[1] - eStub[1]) < EPS
+    eStub[0] - sStub[0] > EPS && Math.abs(sStub[1] - eStub[1]) < Math.max(EPS, flatTol) &&
+    clearH(sStub[1], sStub[0], eStub[0], rects) && clearH(eStub[1], sStub[0], eStub[0], rects)
   ) {
     return null
   }
