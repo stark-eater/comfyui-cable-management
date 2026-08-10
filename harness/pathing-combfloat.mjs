@@ -81,13 +81,12 @@ const ids = await page.evaluate(async () => {
 })
 await settle()
 
-// Aim at the pin-OPPOSITE side of the body: drops within reroute radius of the pin
-// column snap to a tooth first (correct native behavior: connect through the lane).
+// Lane parking moved to the "+" square below the gate (#4 new-lane drop spot);
+// the body now means connect-to-first-matching-pin.
 const gatePoint = (which) => page.evaluate((which) => {
   const c = window.app.graph.extra.cablemanagement_combs[0]
   const h = 24 + (c.lanes.length - 1) * 20
-  const x = c[which].pins === 'left' ? c[which].pos[0] + 18 : c[which].pos[0] + 6
-  return [x, c[which].pos[1] + h / 2]
+  return [c[which].pos[0] + 12, c[which].pos[1] + h + 4 + 12]
 }, which)
 
 // (1) output-drag onto the in-gate -> dangling lane

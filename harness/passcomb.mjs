@@ -75,7 +75,7 @@ const pin = await page.evaluate((i) => {
 const gIn = await page.evaluate(() => {
   const c = window.app.graph.extra.cablemanagement_combs[0]
   const h = 24 + (c.lanes.length - 1) * 20
-  return [c.in.pos[0] + 18, c.in.pos[1] + h / 2]
+  return [c.in.pos[0] + 12, c.in.pos[1] + h + 4 + 12] // "+" square (#4 drop spot)
 })
 await dragScreen(pin, await screenOfGraph(gIn[0], gIn[1]))
 const parkState = () => page.evaluate(() => {
@@ -171,7 +171,7 @@ const pin2 = await page.evaluate((i) => {
 const gIn2 = await page.evaluate(() => {
   const c = window.app.graph.extra.cablemanagement_combs[0]
   const h = 24 + (c.lanes.length - 1) * 20
-  return [c.in.pos[0] + 18, c.in.pos[1] + h / 2]
+  return [c.in.pos[0] + 12, c.in.pos[1] + h + 4 + 12] // "+" square (#4 drop spot)
 })
 await dragScreen(pin2, await screenOfGraph(gIn2[0], gIn2[1]))
 const cycled = await page.evaluate(async () => {

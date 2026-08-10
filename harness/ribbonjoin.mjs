@@ -35,6 +35,14 @@ const drag = async (fx, fy, tx, ty) => {
   await page.waitForTimeout(300)
   await settle()
 }
+// centre of the "+" lane-creation square below a gate (GATE_W 24, PAD 12,
+// PIN_PITCH 20, 4px gap -- mirrors plusRect)
+const plusPt = (which = 'in') => page.evaluate((which) => {
+  const comb = window.app.graph.extra.cablemanagement_combs[0]
+  const [x, y] = comb[which].pos
+  const h = 24 + Math.max(0, comb.lanes.length - 1) * 20
+  return [x + 12, y + h + 4 + 12]
+}, which)
 const combState = () => page.evaluate(() => {
   const g = window.app.graph
   const combs = (g.extra?.cablemanagement_combs ?? []).map((c) => ({
@@ -57,6 +65,8 @@ const ids = await page.evaluate(async () => {
   const s1 = src('S1', 60, 100)
   const s2 = src('S2', 60, 420)
   const s3 = src('S3', 60, 740)
+  const s4 = src('S4', 60, 1060)
+  const gCon = snk('G', 1950, 900) // stays unconnected: polarity-no-op probe
   const t1 = snk('T1', 1450, 60)
   const t2 = snk('T2', 1450, 380)
   const t3 = snk('T3', 1950, 380)
@@ -75,7 +85,7 @@ const ids = await page.evaluate(async () => {
   g.createReroute([700, 860], byTarget(t3))
   g.createReroute([700, 700], byTarget(c))
   return {
-    s1: s1.id, c: c.id, d: d.id, idx,
+    s1: s1.id, c: c.id, d: d.id, s4: s4.id, g: gCon.id, idx,
     dLink: byTarget(d).id,
     rr: [...g.reroutes.keys()]
   }
@@ -87,9 +97,9 @@ await settle()
 await drag(700, 450, 700, 150)
 let st = await combState()
 ok('comb born with 2 lanes', st.combs.length === 1 && st.combs[0].lanes === 2, JSON.stringify(st.combs))
-await drag(700, 860, st.combs[0].inPos[0] + 10, st.combs[0].inPos[1] + 30)
+await drag(700, 860, ...(await plusPt('in')))
 st = await combState()
-ok('third lane enrolled', st.combs[0]?.lanes === 3, JSON.stringify(st.combs))
+ok('third lane enrolled via +', st.combs[0]?.lanes === 3, JSON.stringify(st.combs))
 const cRid = ids.rr[3] // C's reroute: the s2 join candidate, still free
 
 // ---- s1: peel-abort ------------------------------------------------------------
@@ -129,9 +139,9 @@ const freed = await page.evaluate((cRid) => {
   return null
 }, cRid)
 ok('freed dot survives', !!freed, JSON.stringify(freed))
-await drag(freed[0], freed[1], (await combState()).combs[0].inPos[0] + 10, (await combState()).combs[0].inPos[1] + 30)
+await drag(freed[0], freed[1], ...(await plusPt('in')))
 st = await combState()
-ok('re-enrolled to 3 lanes', st.combs[0]?.lanes === 3, JSON.stringify(st.combs))
+ok('re-enrolled to 3 lanes via +', st.combs[0]?.lanes === 3, JSON.stringify(st.combs))
 
 // ---- s2: same-source reroute joins --------------------------------------------
 // C's wire comes from s1 output 0 -- the same source lane 0 carries. Dropping
@@ -177,8 +187,9 @@ const dIn = await page.evaluate(({ d, idx }) => {
 }, ids)
 ok('s3: D input dot found', !!dIn, JSON.stringify(dIn))
 st = await combState()
-// gate BODY (past the 10px pin strip and >12px off the tooth column)
-const [gx, gy] = await screen(st.combs[0].inPos[0] + 18, st.combs[0].inPos[1] + 30)
+// the "+" square: carried same-source links JOIN there (body now means
+// connect-to-first-matching-pin, tested below)
+const [gx, gy] = await screen(...(await plusPt('in')))
 await page.mouse.move(...dIn)
 await page.mouse.down()
 await page.mouse.move(gx, gy, { steps: 14 })
@@ -202,6 +213,58 @@ const dJoin = await page.evaluate(({ d, s1, idx }) => {
 ok('s3: no new lane, no float', st.combs[0]?.lanes === 3 && dJoin.floats === 0,
   JSON.stringify({ lanes: st.combs[0]?.lanes, floats: dJoin.floats }))
 ok('s3: D rides the lane', !!dJoin.s1Lane && dJoin.parent === dJoin.s1Lane.out, JSON.stringify(dJoin))
+
+// ---- s4: fresh source drag onto IN gate BODY = connect to first matching pin
+// (the lane re-sources through its teeth -- core in-pin contract, not a lane)
+const s4out = await page.evaluate(({ s4 }) => {
+  const el = document.querySelector(`[data-slot-key="${s4}-out-0"]`)
+  const r = el?.getBoundingClientRect()
+  return r?.width ? [r.x + r.width / 2, r.y + r.height / 2] : null
+}, ids)
+ok('s4: S4 output dot found', !!s4out, JSON.stringify(s4out))
+st = await combState()
+const bodyPt = await screen(st.combs[0].inPos[0] + 18, st.combs[0].inPos[1] + 30)
+await page.mouse.move(...s4out)
+await page.mouse.down()
+await page.mouse.move(bodyPt[0], bodyPt[1], { steps: 14 })
+await page.waitForTimeout(300)
+await page.mouse.up()
+await page.waitForTimeout(400)
+await settle()
+st = await combState()
+const s4res = await page.evaluate(({ s4 }) => {
+  const g = window.app.graph
+  const comb = g.extra.cablemanagement_combs[0]
+  const t = g.reroutes.get(comb.lanes[0].in)
+  return { lane0Origin: t?.firstLink ? String(t.firstLink.origin_id) : null, floats: g.floatingLinks?.size ?? 0 }
+}, ids)
+ok('s4: body drop re-sources first matching lane, no new lane',
+  st.combs[0]?.lanes === 3 && s4res.lane0Origin === String(ids.s4) && s4res.floats === 0,
+  JSON.stringify({ lanes: st.combs[0]?.lanes, ...s4res }))
+
+// ---- s5: consumer drag onto IN gate BODY = polarity no-op
+const gIn = await page.evaluate(({ g: gid, idx }) => {
+  const el = document.querySelector(`[data-slot-key="${gid}-in-${idx}"]`)
+  const r = el?.getBoundingClientRect()
+  return r?.width ? [r.x + r.width / 2, r.y + r.height / 2] : null
+}, ids)
+ok('s5: G input dot found', !!gIn, JSON.stringify(gIn))
+const beforeS5 = await combState()
+await page.mouse.move(...gIn)
+await page.mouse.down()
+await page.mouse.move(bodyPt[0], bodyPt[1], { steps: 14 })
+await page.waitForTimeout(300)
+await page.mouse.up()
+await page.waitForTimeout(400)
+await settle()
+st = await combState()
+const s5res = await page.evaluate(({ g: gid, idx }) => {
+  const n = window.app.graph.getNodeById(gid) ?? window.app.graph.getNodeById(Number(gid))
+  return { gLink: n?.inputs?.[idx]?.link ?? null, menu: document.querySelectorAll('.litegraph.litecontextmenu, .comfy-menu-popup').length }
+}, ids)
+ok('s5: consumer drag on IN body no-ops',
+  st.combs[0]?.lanes === 3 && st.links === beforeS5.links && s5res.gLink === null,
+  JSON.stringify({ lanes: st.combs[0]?.lanes, links: st.links, was: beforeS5.links, ...s5res }))
 
 ok('no page errors', errs.length === 0, errs.join(' | '))
 await b.close()

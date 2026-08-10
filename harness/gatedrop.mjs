@@ -38,10 +38,12 @@ const gatePoint = (laneIndex, where) => page.evaluate(({ laneIndex, where }) => 
   const GATE_W = 24, PAD = 12, PITCH = 20
   const [x, y] = comb.in.pos
   const h = PAD * 2 + Math.max(0, comb.lanes.length - 1) * PITCH
+  // 'body' points at the "+" square below the gate: lane creation moved there
+  // (#4 new-lane drop spot); the body itself is connect-to-first-matching-pin.
   const gx = where === 'body'
-    ? (comb.in.pins === 'left' ? x + GATE_W - 7 : x + 7)
+    ? x + GATE_W / 2
     : (comb.in.pins === 'left' ? x + 5 : x + GATE_W - 5)
-  const gy = where === 'body' ? y + h / 2 : y + PAD + laneIndex * PITCH
+  const gy = where === 'body' ? y + h + 4 + GATE_W / 2 : y + PAD + laneIndex * PITCH
   const ds = window.app.canvas.ds
   const view = window.app.canvas.canvas.getBoundingClientRect()
   return [view.left + (gx + ds.offset[0]) * ds.scale, view.top + (gy + ds.offset[1]) * ds.scale]

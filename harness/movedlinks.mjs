@@ -45,6 +45,8 @@ const rrPt = (rid) => page.evaluate(({ rid }) => {
   const view = window.app.canvas.canvas.getBoundingClientRect()
   return [view.left + (r.pos[0] + ds.offset[0]) * ds.scale, view.top + (r.pos[1] + ds.offset[1]) * ds.scale]
 }, { rid })
+// Lane creation moved off the gate body onto the "+" square below it (#4
+// new-lane drop spot); these scenarios test lane PARKING, so they target the +.
 const gateBody = (side) => page.evaluate(({ side }) => {
   const g = window.app.graph
   const comb = g.extra.cablemanagement_combs[0]
@@ -52,10 +54,11 @@ const gateBody = (side) => page.evaluate(({ side }) => {
   const gate = comb[side]
   const [x, y] = gate.pos
   const h = PAD * 2 + Math.max(0, comb.lanes.length - 1) * 20
-  const gx = gate.pins === 'left' ? x + GATE_W - 7 : x + 7
+  const gx = x + GATE_W / 2
+  const gy = y + h + 4 + GATE_W / 2
   const ds = window.app.canvas.ds
   const view = window.app.canvas.canvas.getBoundingClientRect()
-  return [view.left + (gx + ds.offset[0]) * ds.scale, view.top + (y + h / 2 + ds.offset[1]) * ds.scale]
+  return [view.left + (gx + ds.offset[0]) * ds.scale, view.top + (gy + ds.offset[1]) * ds.scale]
 }, { side })
 const feed = (id, idx) => page.evaluate(({ id, idx }) => {
   const g = window.app.graph

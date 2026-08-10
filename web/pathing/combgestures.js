@@ -20,7 +20,8 @@
 // element-level listener could never preempt them.
 import {
   clearGateSelection, combAt, detachLane, dissolveComb, gestureCreate,
-  gestureEnroll, isGateSelected, selectGate, selectedGates, setHover, toothOf
+  gestureEnroll, gestureJoin, isGateSelected, selectGate, selectedGates,
+  setDotDrag, setHover, toothOf
 } from './combs.js'
 // Every graph resolution here must be the graph ON SCREEN -- the root graph is not it
 // inside a subgraph, which made all comb gestures dead there and let presses hit-test
@@ -379,6 +380,8 @@ export function installGestures(app, active) {
           }
         }
         press = { rid: r.id, x, y } // observe only; core owns the drag
+        // Free-dot rides show the "+" squares (teeth never enroll themselves).
+        if (!toothOf(r.id)) setDotDrag(true)
       }
     },
     true
@@ -530,6 +533,7 @@ export function installGestures(app, active) {
       canvasPress = false
       shiftPull = null
       pullStart = null
+      setDotDrag(false)
       undimCoreSlots()
     },
     true
@@ -539,6 +543,7 @@ export function installGestures(app, active) {
     'pointerup',
     (e) => {
       canvasPress = false
+      setDotDrag(false) // any release retires the "+" squares next frame
       // Source drag released on a ribbon IN pin. The Vue finalize cannot be
       // trusted with this drop: its reroute-at-pointer stage claims success
       // even when core's connectToRerouteInput refuses an occupied input, so
@@ -648,6 +653,7 @@ export function installGestures(app, active) {
       if (!active() || !press) return
       const p = press
       press = null
+      setDotDrag(false)
       const g = activeGraph(app)
       const [x, y] = graphPt(e)
       if (Math.hypot(x - p.x, y - p.y) < 6) return // click, not a pull
@@ -679,8 +685,13 @@ export function installGestures(app, active) {
         const gate = combAt(g, r.pos[0], r.pos[1])
         const other = gate ? null : rerouteNear(g, r.pos[0], r.pos[1], r)
         const otherTooth = other ? toothOf(other.id) : null
-        if (gate) gestureEnroll(g, gate.comb, r)
-        else if (otherTooth) gestureEnroll(g, otherTooth.comb, r)
+        // Lane creation lives on the "+" square only; gate body and teeth are
+        // join-or-nothing (a same-source dot merges into its lane, anything
+        // else stays a free dot where it landed).
+        if (gate) {
+          if (gate.zone === 'newlane') gestureEnroll(g, gate.comb, r)
+          else gestureJoin(g, gate.comb, r)
+        } else if (otherTooth) gestureJoin(g, otherTooth.comb, r)
         else if (other) gestureCreate(g, other, r)
         g.setDirtyCanvas(true, true)
       }))

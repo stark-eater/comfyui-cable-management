@@ -16,7 +16,7 @@
 
 import { app } from "../../scripts/app.js";
 import { beginFrame, debugRoutes, routeFor, stats } from "./pathing/registry.js";
-import { clearOverlay, combAt, drawGates, gestureFloatingEnroll, installApi, toothOf } from "./pathing/combs.js";
+import { clearOverlay, combAt, drawGates, firstMatchingLane, gestureFloatingEnroll, installApi, toothOf } from "./pathing/combs.js";
 import { installGestures } from "./pathing/combgestures.js";
 import { emit, pointAt } from "./pathing/trace.js";
 import { handlePinDrop, handleGateInDrop, installPinDrops, undimPins, undimCoreSlots } from "./drops.js";
@@ -199,9 +199,39 @@ function tryDropSeams() {
             // Source drag onto an IN gate pin: connect through that lane (drops.js).
             if (handleGateInDrop(app, lc, event)) return;
             const hit = combAt(g, event.canvasX, event.canvasY);
-            if (hit && hit.zone !== "pins" && gestureFloatingEnroll(g, lc, hit.comb)) {
+            // Lane creation lives ONLY on the "+" square below the gate
+            // (Barney's design: body drops were opaque and fiddly next to the
+            // pins, and core's body-drop gesture means connect-to-pin).
+            if (hit && hit.zone === "newlane" && gestureFloatingEnroll(g, lc, hit.comb)) {
               g.setDirtyCanvas(true, true);
               return; // no dispatch -> no search box; caller's cleanup resets the connector
+            }
+            // Gate BODY = core node-body semantics: connect to the first
+            // type-matching pin, synthesized as a drop on that lane's tooth so
+            // every tooth contract (re-source, branch, polarity no-op) applies
+            // verbatim. No matching lane -> consume for a snap-back, exactly
+            // like the dim hint promised.
+            if (hit && hit.zone === "body") {
+              const type = lc.renderLinks?.[0]?.fromSlot?.type;
+              const lane = firstMatchingLane(g, hit.comb, type);
+              const to = lc.state?.connectingTo;
+              if (lane && hit.which === "in" && to === "input") {
+                // Source drag: the in-pin contract, connected manually by
+                // handleGateInDrop -- our tooth blinding starves a raw
+                // dropOnReroute on IN teeth by design.
+                if (handleGateInDrop(app, lc, event, g.reroutes?.get?.(lane.in))) return;
+              } else if (lane && hit.which === "out" && to === "output") {
+                // Consumer drag: OUT teeth keep findSourceOutput, so core's
+                // reroute contract (branch through the lane) works directly.
+                const t = g.reroutes?.get?.(lane.out);
+                if (t && lc.isRerouteValidDrop?.(t)) {
+                  lc.dropOnReroute(t, event);
+                  g.setDirtyCanvas(true, true);
+                  return;
+                }
+              }
+              lc.renderLinks.length = 0; // refused (polarity/type): snap back
+              return;
             }
           }
           // Passthrough pins as drop targets (consumer drags; drops.js).

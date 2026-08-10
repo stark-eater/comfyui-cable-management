@@ -67,11 +67,12 @@ const c1 = await page.evaluate(() => {
 ok('drop on reroute creates comb', c1.combs === 1, `combs=${c1.combs}`)
 ok('two lanes, both dots absorbed', c1.lanes === 2 && c1.reroutes === 5, `lanes=${c1.lanes} reroutes=${c1.reroutes}`)
 
-// (2) enroll: drag reroute 3 onto the out-gate body
+// (2) enroll: drag reroute 3 onto the out-gate's "+" square (lane creation
+// moved there in the #4 new-lane-drop-spot round; body is join-or-nothing)
 const gateMid = await page.evaluate(() => {
   const c = window.app.graph.extra.cablemanagement_combs[0]
   const h = 24 + (c.lanes.length - 1) * 20
-  return [c.out.pos[0] + 12, c.out.pos[1] + h / 2 + 4] // body zone, clear of pin strip? out pins right: strip is right 10px; x+12 of 24 is centre-left = body
+  return [c.out.pos[0] + 12, c.out.pos[1] + h + 4 + 12]
 })
 await drag(700, 800, gateMid[0], gateMid[1])
 const c2 = await page.evaluate(() => {

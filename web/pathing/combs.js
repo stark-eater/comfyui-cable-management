@@ -374,10 +374,31 @@ export function glyphRect(gate, n) {
 
 // Hit-test a graph point against every gate. zone: 'flip' (hover glyph), 'body'
 // (draggable panel), 'pins' (the tooth strip -- left for core's reroute handling).
+// The "+" drop square below a gate: the ONE surface that creates lanes while a
+// drag is live (Barney's design: body drops read as "connect to first matching
+// pin", so lane creation gets its own explicit, visible target).
+export function plusRect(gate, n) {
+  const g = gateGeom(gate, n)
+  return [g.rect[0], g.rect[1] + g.rect[3] + 4, GATE_W, GATE_W]
+}
+
+// True while a free reroute dot rides a core drag (combgestures maintains it);
+// link drags are read off the linkConnector directly. Together they decide
+// when the "+" square draws.
+let dotDragLive = false
+export function setDotDrag(v) {
+  dotDragLive = !!v
+}
+const dotDragActive = () => dotDragLive
+
 export function combAt(graph, x, y) {
   for (const comb of records(graph)) {
     const n = comb.lanes.length
     for (const which of ['in', 'out']) {
+      const pr = plusRect(comb[which], n)
+      if (x >= pr[0] && x <= pr[0] + pr[2] && y >= pr[1] && y <= pr[1] + pr[3]) {
+        return { comb, which, zone: 'newlane' }
+      }
       const gl = glyphRect(comb[which], n)
       if (
         hover?.id === comb.id && hover.which === which &&
@@ -553,7 +574,33 @@ export function gestureCreate(graph, target, dragged) {
   return id
 }
 
-// Reroute dropped onto a gate (or onto a tooth): append as the last lane.
+// Join-or-nothing: a dot released on a gate BODY (or a tooth) merges into a
+// same-source lane when one exists and otherwise does nothing -- only the "+"
+// square creates lanes.
+export function gestureJoin(graph, comb, reroute) {
+  if (toothIndex.has(reroute.id)) return false
+  for (const l of comb.lanes) {
+    const t = graph.reroutes.get(l.in)
+    if (t && sharesLink(t, reroute)) return false
+  }
+  if (!joinLane(graph, comb, reroute)) return false
+  layout(graph, comb)
+  return true
+}
+
+// First lane whose carried type matches a drag's type -- the gate-body "connect
+// to first available matching pin" resolution.
+export function firstMatchingLane(graph, comb, type) {
+  for (const l of comb.lanes) {
+    const ends = laneEnds(graph, l)
+    const carried = ends.links[0]?.type ?? ends.parked[0]?.type ?? ends.hanging[0]?.type ?? null
+    if (typeMatch(carried, type)) return l
+  }
+  return null
+}
+
+// Reroute dropped onto the "+" square: append as the last lane (a same-source
+// wire still JOINS its lane instead of minting a twin).
 export function gestureEnroll(graph, comb, reroute) {
   if (toothIndex.has(reroute.id)) return false
   for (const l of comb.lanes) {
@@ -693,6 +740,25 @@ function drawGate(ctx, graph, comb, which, sel, canvas) {
         fromRid: lc.renderLinks[0]?.fromReroute?.id,
       }
     : null
+  // "+" square: visible exactly while something droppable is in flight (link
+  // drag or a free dot ride); it is the sole lane-creation surface.
+  if (drag || dotDragActive()) {
+    const [px, py, pw, ph] = plusRect(comb[which], n)
+    ctx.beginPath()
+    ctx.roundRect(px, py, pw, ph, 5)
+    ctx.fillStyle = body
+    ctx.fill()
+    ctx.strokeStyle = L?.NODE_DEFAULT_BOXCOLOR ?? '#666'
+    ctx.lineWidth = 1
+    ctx.stroke()
+    ctx.beginPath()
+    const cx = px + pw / 2, cy = py + ph / 2, arm = 5
+    ctx.moveTo(cx - arm, cy); ctx.lineTo(cx + arm, cy)
+    ctx.moveTo(cx, cy - arm); ctx.lineTo(cx, cy + arm)
+    ctx.strokeStyle = L?.NODE_TEXT_COLOR ?? '#ddd'
+    ctx.lineWidth = 1.5
+    ctx.stroke()
+  }
   comb.lanes.forEach((l, i) => {
     const t = graph.reroutes?.get?.(l[which])
     let dim = false
