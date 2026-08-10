@@ -40,7 +40,7 @@ const drag = async (fx, fy, tx, ty) => {
 const plusPt = (which = 'in') => page.evaluate((which) => {
   const comb = window.app.graph.extra.cablemanagement_combs[0]
   const [x, y] = comb[which].pos
-  const h = 24 + Math.max(0, comb.lanes.length - 1) * 20
+  const h = 24 + Math.max(2, comb.lanes.length - 1) * 20
   return [x + 12, y + h + 4 + 12]
 }, which)
 const combState = () => page.evaluate(() => {

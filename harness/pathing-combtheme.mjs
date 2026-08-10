@@ -43,7 +43,7 @@ await settle()
 const sample = () => page.evaluate(() => {
   const c = window.app.graph.extra.cablemanagement_combs[0]
   const n = c.lanes.length
-  const h = 24 + (n - 1) * 20
+  const h = 24 + Math.max(2, n - 1) * 20
   const cx = c.in.pos[0] + 12, cy = c.in.pos[1] + h / 2
   const overlay = document.querySelector('.cablemanagement-gate-overlay')
   const { scale, offset } = window.app.canvas.ds
@@ -52,12 +52,13 @@ const sample = () => page.evaluate(() => {
     const d = overlay.getContext('2d').getImageData(Math.round(k * (x + offset[0])), Math.round(k * (y + offset[1])), 1, 1).data
     return [d[0], d[1], d[2], d[3]]
   }
-  // The caret stroke is anti-aliased; take the reddest pixel of a 3x3 at the apex.
+  // Chrome-round caret: a FILLED rgba(0,0,0,0.45) triangle (information, not
+  // interaction) -- sample its base side (solid) and take the darkest pixel.
   const ctx2 = overlay.getContext('2d')
-  const a = ctx2.getImageData(Math.round(k * (cx + 3 + offset[0])) - 1, Math.round(k * (cy + offset[1])) - 1, 3, 3).data
-  let apex = [0, 0, 0, 0]
+  const a = ctx2.getImageData(Math.round(k * (cx - 2 + offset[0])) - 1, Math.round(k * (cy + offset[1])) - 1, 3, 3).data
+  let apex = [255, 255, 255, 0]
   for (let i = 0; i < a.length; i += 4) {
-    if (a[i] - a[i + 1] > apex[0] - apex[1]) apex = [a[i], a[i + 1], a[i + 2], a[i + 3]]
+    if (a[i + 3] > 0 && a[i] < apex[0]) apex = [a[i], a[i + 1], a[i + 2], a[i + 3]]
   }
   return { body: px(cx, cy + 8), apex }
 })
@@ -74,7 +75,9 @@ await settle()
 const after = await sample()
 const near = (v, want) => Math.abs(v - want) <= 3
 ok('body follows NODE_DEFAULT_BGCOLOR', near(after.body[0], 32) && near(after.body[1], 64) && near(after.body[2], 96), JSON.stringify(after.body))
-ok('caret follows NODE_TITLE_COLOR', after.apex[0] > 120 && after.apex[0] - after.apex[1] > 40, JSON.stringify(after.apex))
+// Ruling (chrome round): the caret is INFORMATION -- fixed semitransparent
+// black over the body, deliberately NOT theme chrome. Dark over the sentinel.
+ok('caret is the fixed dark overlay', after.apex[3] > 0 && after.apex[0] < after.body[0] - 6 && after.apex[1] < after.body[1] - 12, JSON.stringify({ apex: after.apex, body: after.body }))
 
 console.log('page errors:', errs.length ? errs : 'none')
 console.log(pass ? 'PASS' : 'FAIL')

@@ -65,13 +65,13 @@ const gatePos = (which) => page.evaluate((w) => {
 
 // (1) click in-gate body
 const [ix, iy, n1] = await gatePos('in')
-await click(ix + 18, iy + (24 + (n1 - 1) * 20) / 2)
+await click(ix + 21, iy + (24 + Math.max(2, n1 - 1) * 20) / 2)
 let s = await sel()
 ok('click selects the gate', s.length === 1 && s[0].endsWith('|in'), JSON.stringify(s))
 
 // (2) shift-click out-gate body
 const [ox, oy, n2] = await gatePos('out')
-await click(ox + 6, oy + (24 + (n2 - 1) * 20) / 2, ['Shift'])
+await click(ox + 2, oy + (24 + Math.max(2, n2 - 1) * 20) / 2, ['Shift'])
 s = await sel()
 ok('shift-click adds the other gate', s.length === 2, JSON.stringify(s))
 
@@ -148,7 +148,8 @@ const pre2 = await page.evaluate((ids) => {
   const c = g.extra.cablemanagement_combs.find(Boolean)
   return { node: g.getNodeById(ids.s3).pos.slice(), gin: c.in.pos.slice() }
 }, ids)
-const [gsx, gsy] = await screen(pre2.gin[0] + 18, pre2.gin[1] + 22)
+// x+21: right of the hover glyph column (x+6..x+18), still inside the body
+const [gsx, gsy] = await screen(pre2.gin[0] + 21, pre2.gin[1] + 22)
 await page.mouse.move(gsx, gsy)
 await page.mouse.down()
 await page.mouse.move(gsx - 90, gsy - 50, { steps: 10 })
@@ -181,7 +182,7 @@ await page.evaluate(async (ids) => {
 await settle()
 const [zx, zy, zn] = await gatePos('in') // first comb (find(Boolean) = first record)
 const firstId = await page.evaluate(() => window.app.graph.extra.cablemanagement_combs[0].id)
-await click(zx + 18, zy + (24 + (zn - 1) * 20) / 2)
+await click(zx + 21, zy + (24 + Math.max(2, zn - 1) * 20) / 2)
 const zorder = await page.evaluate(() => window.app.graph.extra.cablemanagement_combs.map((c) => c.id))
 ok('selection moves comb to top of z-order', zorder[zorder.length - 1] === firstId, `order=${zorder} first=${firstId}`)
 
@@ -227,7 +228,7 @@ const state = (links) => page.evaluate((links) => {
 let { links } = await build()
 await settle()
 let [gx, gy, gn] = await gatePos('in')
-await click(gx + 18, gy + (24 + (gn - 1) * 20) / 2)
+await click(gx + 21, gy + (24 + Math.max(2, gn - 1) * 20) / 2)
 await del()
 let st = await state(links)
 ok('one-gate delete dissolves the comb', st.records === 0, JSON.stringify(st))
@@ -238,9 +239,9 @@ ok('no toast on gates-only delete', !st.toast)
 ;({ links } = await build())
 await settle()
 ;[gx, gy, gn] = await gatePos('in')
-await click(gx + 18, gy + (24 + (gn - 1) * 20) / 2)
+await click(gx + 21, gy + (24 + Math.max(2, gn - 1) * 20) / 2)
 const [ox2, oy2, on2] = await gatePos('out')
-await click(ox2 + 6, oy2 + (24 + (on2 - 1) * 20) / 2, ['Shift'])
+await click(ox2 + 2, oy2 + (24 + Math.max(2, on2 - 1) * 20) / 2, ['Shift'])
 await del()
 st = await state(links)
 ok('both-gates delete heals the links', st.records === 0 && st.reroutes === 0 && st.chains.every((c) => c === 0), JSON.stringify(st))
@@ -256,9 +257,9 @@ const extraId = await page.evaluate(() => {
 await settle()
 await marquee(640, 650, 1000, 830) // node only
 ;[gx, gy, gn] = await gatePos('in')
-await click(gx + 18, gy + (24 + (gn - 1) * 20) / 2, ['Shift'])
+await click(gx + 21, gy + (24 + Math.max(2, gn - 1) * 20) / 2, ['Shift'])
 const [ox3, oy3, on3] = await gatePos('out')
-await click(ox3 + 6, oy3 + (24 + (on3 - 1) * 20) / 2, ['Shift'])
+await click(ox3 + 2, oy3 + (24 + Math.max(2, on3 - 1) * 20) / 2, ['Shift'])
 const preMix = await page.evaluate((id) => ({
   node: !!window.app.graph.getNodeById(id),
   coreSel: window.app.canvas.selectedItems.size,

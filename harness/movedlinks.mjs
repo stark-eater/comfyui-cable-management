@@ -53,7 +53,7 @@ const gateBody = (side) => page.evaluate(({ side }) => {
   const GATE_W = 24, PAD = 12
   const gate = comb[side]
   const [x, y] = gate.pos
-  const h = PAD * 2 + Math.max(0, comb.lanes.length - 1) * 20
+  const h = PAD * 2 + Math.max(2, comb.lanes.length - 1) * 20
   const gx = x + GATE_W / 2
   const gy = y + h + 4 + GATE_W / 2
   const ds = window.app.canvas.ds

@@ -45,31 +45,36 @@ await settle()
 const sample = (which) => page.evaluate((which) => {
   const c = window.app.graph.extra.cablemanagement_combs[0]
   const n = c.lanes.length
-  const h = 24 + (n - 1) * 20
+  const h = 24 + Math.max(2, n - 1) * 20
   const gx = c[which].pos[0] + 12, gy = c[which].pos[1] + h / 2
   const overlay = document.querySelector('.cablemanagement-gate-overlay')
   const { scale, offset } = window.app.canvas.ds
   const dpr = window.devicePixelRatio || 1
   const k = dpr * scale
   const ctx = overlay.getContext('2d')
+  // Chrome-round caret: FILLED rgba(0,0,0,0.45) -- caret pixels are the body
+  // colour darkened, so count pixels clearly darker than a body reference.
+  const bref = ctx.getImageData(Math.round(k * (gx + offset[0])), Math.round(k * (gy - 10 + offset[1])), 1, 1).data
   const count = (cx) => {
     const img = ctx.getImageData(Math.round(k * (cx - 2 + offset[0])), Math.round(k * (gy - 2 + offset[1])), Math.ceil(4 * k), Math.ceil(4 * k))
     let lit = 0
-    for (let i = 0; i < img.data.length; i += 4) if (img.data[i + 3] > 0 && img.data[i] > 60) lit++
+    for (let i = 0; i < img.data.length; i += 4) if (img.data[i + 3] > 0 && img.data[i] < bref[0] - 6) lit++
     return lit
   }
   return { left: count(gx - 3), right: count(gx + 3) }
 }, which)
 
+// The filled triangle is SOLID at its base and a sliver at the apex, so the
+// box OPPOSITE the pointing direction lights up: points right => left > right.
 const in1 = await sample('in')
-ok('in-gate caret points at the ribbon (right)', in1.right > in1.left + 2, JSON.stringify(in1))
+ok('in-gate caret points at the ribbon (right)', in1.left > in1.right + 2, JSON.stringify(in1))
 const out1 = await sample('out')
-ok('out-gate caret points at the pins (right)', out1.right > out1.left + 2, JSON.stringify(out1))
+ok('out-gate caret points at the pins (right)', out1.left > out1.right + 2, JSON.stringify(out1))
 
 await page.evaluate((id) => window.__cablemanagementCombs.flip(id, 'in'), combId)
 await settle()
 const in2 = await sample('in')
-ok('flipping the in-gate flips its caret', in2.left > in2.right + 2, JSON.stringify(in2))
+ok('flipping the in-gate flips its caret', in2.right > in2.left + 2, JSON.stringify(in2))
 
 console.log('page errors:', errs.length ? errs : 'none')
 console.log(pass ? 'PASS' : 'FAIL')

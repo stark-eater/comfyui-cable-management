@@ -37,13 +37,17 @@ const gatePoint = (laneIndex, where) => page.evaluate(({ laneIndex, where }) => 
   const comb = g.extra.cablemanagement_combs[0]
   const GATE_W = 24, PAD = 12, PITCH = 20
   const [x, y] = comb.in.pos
-  const h = PAD * 2 + Math.max(0, comb.lanes.length - 1) * PITCH
+  const h = PAD * 2 + Math.max(2, comb.lanes.length - 1) * PITCH
   // 'body' points at the "+" square below the gate: lane creation moved there
   // (#4 new-lane drop spot); the body itself is connect-to-first-matching-pin.
   const gx = where === 'body'
     ? x + GATE_W / 2
     : (comb.in.pins === 'left' ? x + 5 : x + GATE_W - 5)
-  const gy = where === 'body' ? y + h + 4 + GATE_W / 2 : y + PAD + laneIndex * PITCH
+  // Pin block is vertically CENTRED on the min-height gate (2-lane gates got
+  // 3-lane height in the #4 chrome round) -- y+PAD only holds at 3+ lanes.
+  const gy = where === 'body'
+    ? y + h + 4 + GATE_W / 2
+    : y + (h - (comb.lanes.length - 1) * PITCH) / 2 + laneIndex * PITCH
   const ds = window.app.canvas.ds
   const view = window.app.canvas.canvas.getBoundingClientRect()
   return [view.left + (gx + ds.offset[0]) * ds.scale, view.top + (gy + ds.offset[1]) * ds.scale]

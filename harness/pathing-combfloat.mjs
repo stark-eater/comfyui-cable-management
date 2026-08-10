@@ -85,7 +85,7 @@ await settle()
 // the body now means connect-to-first-matching-pin.
 const gatePoint = (which) => page.evaluate((which) => {
   const c = window.app.graph.extra.cablemanagement_combs[0]
-  const h = 24 + (c.lanes.length - 1) * 20
+  const h = 24 + Math.max(2, c.lanes.length - 1) * 20
   return [c[which].pos[0] + 12, c[which].pos[1] + h + 4 + 12]
 }, which)
 

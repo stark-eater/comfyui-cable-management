@@ -135,7 +135,7 @@ const out = await page.evaluate(async () => {
   )
   const unionBox = () => {
     const c = C.list()[0]
-    const h = 24 + (c.lanes.length - 1) * 20
+    const h = 24 + Math.max(2, c.lanes.length - 1) * 20
     return [
       Math.min(c.in.pos[0], c.out.pos[0]), Math.min(c.in.pos[1], c.out.pos[1]),
       Math.max(c.in.pos[0], c.out.pos[0]) + 24, Math.max(c.in.pos[1], c.out.pos[1]) + h

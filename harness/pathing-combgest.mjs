@@ -71,7 +71,7 @@ ok('two lanes, both dots absorbed', c1.lanes === 2 && c1.reroutes === 5, `lanes=
 // moved there in the #4 new-lane-drop-spot round; body is join-or-nothing)
 const gateMid = await page.evaluate(() => {
   const c = window.app.graph.extra.cablemanagement_combs[0]
-  const h = 24 + (c.lanes.length - 1) * 20
+  const h = 24 + Math.max(2, c.lanes.length - 1) * 20
   return [c.out.pos[0] + 12, c.out.pos[1] + h + 4 + 12]
 })
 await drag(700, 800, gateMid[0], gateMid[1])
@@ -86,7 +86,8 @@ ok('three ribbon crossings live', c2.crossings === 3, `got ${c2.crossings}`)
 // (3) gate drag: grab the out-gate body, pull it 360 right
 const before = await page.evaluate(() => window.app.graph.extra.cablemanagement_combs[0].out.pos.slice())
 const h3 = await page.evaluate(() => 24 + (window.app.graph.extra.cablemanagement_combs[0].lanes.length - 1) * 20)
-await drag(before[0] + 8, before[1] + h3 - 6, before[0] + 8 + 360, before[1] + h3 - 6)
+// x+2: the hover control column (glyphs at x+6..x+18) owns mid-gate clicks now
+await drag(before[0] + 2, before[1] + h3 - 6, before[0] + 2 + 360, before[1] + h3 - 6)
 const c3 = await page.evaluate(() => {
   const g = window.app.graph
   const rec = g.extra.cablemanagement_combs[0]

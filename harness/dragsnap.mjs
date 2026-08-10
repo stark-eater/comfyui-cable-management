@@ -107,7 +107,7 @@ await settle()
 // --- Case B: comb out-tooth pull of a dangling lane, held over the node body
 const gatePoint = await page.evaluate(() => {
   const c = window.app.graph.extra.cablemanagement_combs[0]
-  const h = 24 + (c.lanes.length - 1) * 20
+  const h = 24 + Math.max(2, c.lanes.length - 1) * 20
   // "+" square below the gate: lane parking moved there (#4 drop spot)
   return [c.in.pos[0] + 12, c.in.pos[1] + h + 4 + 12]
 })
