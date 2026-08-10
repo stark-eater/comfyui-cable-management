@@ -595,7 +595,13 @@ export function combAt(graph, x, y) {
 export function laneAt(comb, which, y) {
   const gate = comb[which]
   if (!gate || !comb.lanes.length) return null
-  const i = Math.round((y - (gate.pos[1] + PAD)) / PIN_PITCH)
+  // Derive from gateGeom's pinY, not a PAD anchor: the pin block is vertically
+  // CENTRED on the min-height gate (chrome round), so on a 2-lane gate the
+  // top pin sits half a pitch below y+PAD and the old anchor resolved every
+  // pin to the wrong lane (battery catch: feedback snap hinted lane 1 while
+  // hovering lane 0's pin).
+  const g = gateGeom(gate, comb.lanes.length)
+  const i = Math.round((y - g.pinY(0)) / PIN_PITCH)
   return comb.lanes[Math.max(0, Math.min(comb.lanes.length - 1, i))] ?? null
 }
 

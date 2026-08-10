@@ -117,7 +117,7 @@ const before = await page.evaluate(() => {
   const teeth = c.lanes.map((l) => [...window.app.canvas.graph.reroutes.get(l.in).pos])
   return { gate: [...c.in.pos], teeth }
 })
-await drag(before.gate[0] + 12, before.gate[1] + 30, before.gate[0] + 212, before.gate[1] + 90)
+await drag(before.gate[0] + 21, before.gate[1] + 30, before.gate[0] + 212, before.gate[1] + 90)
 const after = await page.evaluate(() => {
   const c = window.app.canvas.graph.extra.cablemanagement_combs[0]
   const teeth = c.lanes.map((l) => [...window.app.canvas.graph.reroutes.get(l.in).pos])
@@ -188,7 +188,7 @@ const rBefore = await page.evaluate((i) => {
   const c = window.app.graph.extra.cablemanagement_combs.find((c) => c.id === i.combId)
   return { gate: [...c.in.pos], tooth: [...window.app.graph.reroutes.get(c.lanes[0].in).pos] }
 }, ids)
-await drag(rBefore.gate[0] + 12, rBefore.gate[1] + 30, rBefore.gate[0] + 162, rBefore.gate[1] + 80)
+await drag(rBefore.gate[0] + 21, rBefore.gate[1] + 30, rBefore.gate[0] + 162, rBefore.gate[1] + 80)
 const rAfter = await page.evaluate((i) => {
   const c = window.app.graph.extra.cablemanagement_combs.find((c) => c.id === i.combId)
   return { gate: [...c.in.pos], tooth: [...window.app.graph.reroutes.get(c.lanes[0].in).pos] }

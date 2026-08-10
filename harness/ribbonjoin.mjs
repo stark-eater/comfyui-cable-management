@@ -223,7 +223,7 @@ const s4out = await page.evaluate(({ s4 }) => {
 }, ids)
 ok('s4: S4 output dot found', !!s4out, JSON.stringify(s4out))
 st = await combState()
-const bodyPt = await screen(st.combs[0].inPos[0] + 18, st.combs[0].inPos[1] + 30)
+const bodyPt = await screen(st.combs[0].inPos[0] + 21, st.combs[0].inPos[1] + 30)
 await page.mouse.move(...s4out)
 await page.mouse.down()
 await page.mouse.move(bodyPt[0], bodyPt[1], { steps: 14 })

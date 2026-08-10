@@ -423,8 +423,8 @@ if (redo.combs.length === 0) {
 const gateScreen = await page.evaluate(() => {
   const c = window.app.graph.extra?.cablemanagement_combs?.[0]
   if (!c) return null
-  const h = 24 + (c.lanes.length - 1) * 20
-  const x = c.out.pins === 'left' ? c.out.pos[0] + 18 : c.out.pos[0] + 6
+  const h = 24 + Math.max(2, c.lanes.length - 1) * 20
+  const x = c.out.pins === 'left' ? c.out.pos[0] + 21 : c.out.pos[0] + 2
   const { ds } = window.app.canvas
   return [(x + ds.offset[0]) * ds.scale, (c.out.pos[1] + h / 2 + ds.offset[1]) * ds.scale]
 })
