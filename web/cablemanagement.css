@@ -231,3 +231,19 @@ body.cablemanagement-dragging .cablemanagement-pin {
 .cablemanagement-more[data-which="outputs"] {
   right: 6px;
 }
+
+/* Sort-lanes modal rows (content lives inside comfy's own dialog chrome). */
+.cablemanagement-sort { min-width: 200px; }
+.cablemanagement-sort-row {
+  display: flex; align-items: center; gap: 8px;
+  padding: 5px 10px; margin: 3px 0;
+  border: 1px solid var(--border-color, #444); border-radius: 4px;
+  cursor: grab; user-select: none; font-size: 12px;
+}
+.cablemanagement-sort-dragging { opacity: 0.6; cursor: grabbing; }
+.cablemanagement-sort-dot {
+  width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto;
+}
+.cablemanagement-sort-buttons {
+  display: flex; justify-content: flex-end; gap: 8px; margin-top: 10px;
+}

@@ -27,6 +27,7 @@ import {
 // inside a subgraph, which made all comb gestures dead there and let presses hit-test
 // invisible root gates from subgraph coordinates.
 import { activeGraph } from '../graph.js'
+import { openSortModal } from './sortmodal.js'
 import { handleGateInDrop, dimCoreSlots, undimCoreSlots } from '../drops.js'
 import { forgetProvenance, severSource } from '../reanchor.js'
 import { invalidate } from '../ledger.js'
@@ -104,6 +105,7 @@ export function installGestures(app, active) {
   // selected NODE arms this; deltas are read off that node's own pos, which works
   // for both the legacy canvas drag and the Vue node drag.
   let follow = null // {refNode, refPos, gates: [{comb, which, origin}]}
+  let cursorSet = false // we own the canvas cursor only while over a glyph
 
   const graphPt = (e) => {
     const c = app.canvas
@@ -229,6 +231,30 @@ export function installGestures(app, active) {
       const hit = combAt(g, x, y)
       if (hit?.zone === 'flip') {
         hit.comb[hit.which].pins = hit.comb[hit.which].pins === 'left' ? 'right' : 'left'
+        g.setDirtyCanvas(true, true)
+        e.stopPropagation(); e.preventDefault()
+        return
+      }
+      if (hit?.zone === 'sort') {
+        openSortModal(g, hit.comb)
+        e.stopPropagation(); e.preventDefault()
+        return
+      }
+      if (hit?.zone === 'collapse' || hit?.zone === 'expand') {
+        // Per-ribbon collapse (node-collapse semantics): one bit on the record,
+        // both gates and the lane geometry follow on the next combPass.
+        if (hit.comb.collapsed) delete hit.comb.collapsed
+        else hit.comb.collapsed = true
+        g.setDirtyCanvas(true, true)
+        e.stopPropagation(); e.preventDefault()
+        return
+      }
+      if (hit?.zone === 'labels') {
+        // Labels toggle (#4): per gate, persisted on the record; the bulge and
+        // the label list themselves are combPass transients.
+        const gate = hit.comb[hit.which]
+        if (gate.labels) delete gate.labels
+        else gate.labels = true
         g.setDirtyCanvas(true, true)
         e.stopPropagation(); e.preventDefault()
         return
@@ -443,7 +469,10 @@ export function installGestures(app, active) {
       }
       if (gateDrag) {
         const L = window.LiteGraph
-        const grid = L?.alwaysSnapToGrid && L.CANVAS_GRID_SIZE > 0 ? L.CANVAS_GRID_SIZE : 0
+        // Grid snap when the setting demands it OR shift is held (core's
+        // shift-drag convention, extended to gates).
+        const wantSnap = (L?.alwaysSnapToGrid || e.shiftKey) && L?.CANVAS_GRID_SIZE > 0
+        const grid = wantSnap ? L.CANVAS_GRID_SIZE : 0
         const snap = (v) => (grid ? Math.round(v / grid) * grid : v)
         const dx = x - gateDrag.press[0], dy = y - gateDrag.press[1]
         for (const gd of gateDrag.gates) {
@@ -479,10 +508,34 @@ export function installGestures(app, active) {
         driveSnap(e) // core-owned drag born on the canvas (reroute slot pulls)
         return
       }
-      if (!app.canvas?.pointer?.isDown) setHover(combAt(activeGraph(app), x, y), activeGraph(app))
+      if (!app.canvas?.pointer?.isDown) {
+        setHover(combAt(activeGraph(app), x, y), activeGraph(app))
+      }
     },
     true
   )
+
+  // Interactive glyphs advertise themselves: pointer cursor over any clickable
+  // zone. BUBBLE phase on purpose -- core's own element-level mousemove writes
+  // the cursor every frame, so the override must run AFTER it (a capture-phase
+  // write was overwritten to 'default' the moment core had ever dragged).
+  document.addEventListener('pointermove', (e) => {
+    if (!active() || app.canvas?.pointer?.isDown) return
+    const g = activeGraph(app)
+    if (!g) return
+    const [x, y] = graphPt(e)
+    const hit = combAt(g, x, y)
+    const clicky = hit && ['flip', 'labels', 'sort', 'collapse', 'expand'].includes(hit.zone)
+    const cv = app.canvas?.canvas
+    if (!cv) return
+    if (clicky) {
+      cv.style.cursor = 'pointer'
+      cursorSet = true
+    } else if (cursorSet) {
+      cv.style.cursor = 'default'
+      cursorSet = false
+    }
+  })
 
   // Delete/Backspace on selected gates. Core's binding runs the
   // DeleteSelectedItems command off a WINDOW bubble listener -- gates are not

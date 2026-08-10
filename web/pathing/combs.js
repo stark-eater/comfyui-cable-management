@@ -14,7 +14,7 @@
 import { offsetStrand, route } from './router.js'
 import { activeGraph, nodeFromId } from '../graph.js'
 import { carriedLinkOf, migrateFloatFrom, provenanceOf, recordProvenance, settleCarriedLink } from '../reanchor.js'
-import { routeSrc, unclaim } from '../routestore.js'
+import { floatSrc, routeSrc, unclaim } from '../routestore.js'
 
 const KEY = 'cablemanagement_combs'
 const GATE_W = 24 // gate body width; the pin->lane fan hides inside it
@@ -52,16 +52,40 @@ function records(graph, create = false) {
 // Derived gate geometry. pos is the gate rect's top-left; pins on `pins` side, the
 // ribbon face is the opposite edge. Ribbon lanes centre on the gate's middle.
 function gateGeom(gate, n) {
-  const h = PAD * 2 + Math.max(0, n - 1) * PIN_PITCH
   const [x, y] = gate.pos
+  // Collapsed ribbon (per-comb; combPass mirrors comb.collapsed onto the gates
+  // as a transient): the gate is a GATE_W square, every pin and lane stacks on
+  // its centre -- node-collapse semantics, implicit linking only.
+  if (gate._collapsed) {
+    const cy = y + GATE_W / 2
+    return {
+      rect: [x, y, GATE_W, GATE_W],
+      pinX: gate.pins === 'left' ? x : x + GATE_W,
+      ribbonX: gate.pins === 'left' ? x + GATE_W : x,
+      centerY: cy,
+      pinY: () => cy,
+      laneY: () => cy,
+      pinDir: gate.pins,
+      ribbonDir: gate.pins === 'left' ? 'right' : 'left'
+    }
+  }
+  // Min height = a 3-lane gate (ruling): the hover control column carries up
+  // to four glyphs, and a 2-lane gate must hold them too.
+  const h = PAD * 2 + Math.max(2, Math.max(0, n - 1)) * PIN_PITCH
+  // Labels expansion (ruling: pins stay put, the body bulges toward the ribbon
+  // side). _labelW is a transient, non-enumerable stash written by combPass --
+  // never serialized; gate.labels (the toggle) is the persisted bit.
+  const extra = gate.labels ? gate._labelW ?? 0 : 0
   const pinX = gate.pins === 'left' ? x : x + GATE_W
-  const ribbonX = gate.pins === 'left' ? x + GATE_W : x
+  const ribbonX = gate.pins === 'left' ? x + GATE_W + extra : x - extra
   return {
-    rect: [x, y, GATE_W, h],
+    rect: gate.pins === 'left' ? [x, y, GATE_W + extra, h] : [x - extra, y, GATE_W + extra, h],
     pinX,
     ribbonX,
     centerY: y + h / 2,
-    pinY: (i) => y + PAD + i * PIN_PITCH,
+    // Pin block vertically centred on the gate (Barney's nitpick): identical
+    // to the PAD anchor at 3+ lanes, centred when min-height adds headroom.
+    pinY: (i) => y + (h - Math.max(0, n - 1) * PIN_PITCH) / 2 + i * PIN_PITCH,
     laneY: (i) => y + h / 2 + (i - (n - 1) / 2) * PITCH,
     pinDir: gate.pins, // direction a pin-side wire extends away from the gate
     ribbonDir: gate.pins === 'left' ? 'right' : 'left'
@@ -102,6 +126,87 @@ export function combCrossing(sRid, eRid) {
 // deleted with the extension off, undo, etc.), auto-decompose below two lanes, snap
 // teeth onto their pin slots, rebuild the index. A tooth the user is core-dragging
 // is exempt from the snap -- the drop decides whether it detaches or snaps back.
+// ---- lane labels (#4, precursor for sorting) -------------------------------------
+// What a lane is called: the label a user would read at the wire's SOURCE end.
+// Resolution order mirrors the drawing illusion -- the apparent source wins
+// (route/float claims on the teeth, or the owned-primitive host pair), so a
+// passthrough-fed lane is named after the host's input/widget row, not the true
+// upstream. Read live every pass: slot renames are silent property writes.
+const LABEL_FONT = '11px Arial'
+const LABEL_PAD = 8 // gap pin->text and text->header strip
+// The ribbon-side strip of an expanded gate is the COLLAPSED GATE BODY acting
+// as a vertical header (Barney's spec): controls and caret live there, and the
+// label-to-ribbon distance is exactly label-to-pin gap + that header.
+function ctrlCx(gate, g) {
+  if (!(gate.labels && gate._labelW)) return g.rect[0] + g.rect[2] / 2
+  return gate.pins === 'right' ? g.rect[0] + GATE_W / 2 : g.rect[0] + g.rect[2] - GATE_W / 2
+}
+
+const slotName = (s) => s?.label ?? s?.localized_name ?? s?.name ?? null
+
+export function laneLabel(graph, lane) {
+  const nodeById = (id) => graph.getNodeById(id) ?? graph.getNodeById(Number(id))
+  const apparent =
+    routeSrc(graph, lane.in) ?? routeSrc(graph, lane.out) ??
+    floatSrc(graph, lane.in) ?? floatSrc(graph, lane.out)
+  if (apparent) {
+    const name = slotName(nodeById(apparent[0])?.inputs?.[Number(apparent[1])])
+    if (name) return name
+  }
+  const t = graph.reroutes?.get?.(lane.in)
+  const ll = t?.firstLink ?? t?.firstFloatingLink
+  if (ll && ll.origin_id != null && ll.origin_id !== -1) {
+    const origin = nodeById(ll.origin_id)
+    if (origin?.properties?.['cablemanagement.owned']) {
+      const name = slotName(
+        nodeById(origin.properties['cablemanagement.host'])?.inputs?.[
+          Number(origin.properties['cablemanagement.hostSlot'])
+        ]
+      )
+      if (name) return name
+    }
+    const name = slotName(origin?.outputs?.[ll.origin_slot])
+    if (name) return name
+  }
+  return '—' // sourceless lane (ruling: placeholder, count stays honest)
+}
+
+// Offscreen measurer: widths are needed in combPass, before any draw ctx exists.
+let measureCtx = null
+function labelWidth(text) {
+  measureCtx ??= document.createElement('canvas').getContext('2d')
+  measureCtx.font = LABEL_FONT
+  return measureCtx.measureText(text).width
+}
+
+// Per-pass label refresh for a labels-on OUT gate: resolves every lane's name,
+// stashes the list and the bulge width as NON-ENUMERABLE transients (JSON never
+// sees them; gate.labels is the only persisted bit). No cap by ruling: a novel
+// gets shown as a novel.
+function refreshLabels(graph, comb) {
+  let list = null // both gates show the SOURCE names; resolve once
+  for (const which of ['in', 'out']) {
+    const gate = comb[which]
+    // Mirror the per-comb collapse onto each gate (gateGeom reads gates only).
+    Object.defineProperty(gate, '_collapsed', {
+      value: !!comb.collapsed, writable: true, configurable: true, enumerable: false
+    })
+    if (!gate.labels || comb.collapsed) {
+      if (gate._labelW) stash(gate, 0, null)
+      continue
+    }
+    list ??= comb.lanes.map((l) => laneLabel(graph, l))
+    let w = 0
+    for (const t of list) w = Math.max(w, labelWidth(t))
+    stash(gate, Math.ceil(w) + LABEL_PAD * 2, list)
+  }
+}
+
+function stash(gate, w, list) {
+  Object.defineProperty(gate, '_labelW', { value: w, writable: true, configurable: true, enumerable: false })
+  Object.defineProperty(gate, '_labelList', { value: list, writable: true, configurable: true, enumerable: false })
+}
+
 export function combPass(graph, canvas) {
   if (!graph) return
   let held = null
@@ -145,6 +250,7 @@ export function combPass(graph, canvas) {
       tplCache.delete(comb.id)
       continue
     }
+    refreshLabels(graph, comb) // before layout: the bulge is part of the geometry
     layout(graph, comb, held)
     comb.lanes.forEach((l, lane) => {
       idx.set(l.in, { comb, lane, side: 'in' })
@@ -202,10 +308,12 @@ export function crossingPts(graph, comb, lane, obstacles, clearance, version) {
   const n = comb.lanes.length
   const gi = gateGeom(comb.in, n)
   const go = gateGeom(comb.out, n)
-  const off = (lane - (n - 1) / 2) * PITCH
+  // Collapsed ribbon: every lane rides ONE line (decollision zero) -- offsets
+  // and the ribbon half-width vanish, all strands draw identical points.
+  const off = comb.collapsed ? 0 : (lane - (n - 1) / 2) * PITCH
   const a = [gi.ribbonX, gi.laneY(lane)]
   const b = [go.ribbonX, go.laneY(lane)]
-  const halfRibbon = Math.ceil(((n - 1) * PITCH) / 2)
+  const halfRibbon = comb.collapsed ? 0 : Math.ceil(((n - 1) * PITCH) / 2)
 
   let mid = null
   // Direct seam mode: facing gates closer than the corridor the router needs
@@ -223,8 +331,14 @@ export function crossingPts(graph, comb, lane, obstacles, clearance, version) {
   // into bodily overlap, where the wrap would flash back mid-drag.
   // Upper bound = the room the template's face stubs need (24 + halfRibbon per
   // side, matching the route() call below): a gap the stubs cannot fit makes
-  // the template itself fold, so the seam takes over exactly there.
-  if (dirOut === -dirIn && gap >= -GATE_W && gap < 2 * (24 + halfRibbon)) {
+  // the template itself fold, so the seam takes over exactly there. The
+  // negative slack absorbs a labels bulge too -- an expanded out gate can
+  // burrow under an adjacent in gate, and the straight seam (wires under the
+  // gate bodies) is the right shape there, not a wrap.
+  const slack = GATE_W +
+    (comb.out.labels ? comb.out._labelW ?? 0 : 0) +
+    (comb.in.labels ? comb.in._labelW ?? 0 : 0)
+  if (dirOut === -dirIn && gap >= -slack && gap < 2 * (24 + halfRibbon)) {
     if (Math.abs(a[1] - b[1]) < 0.1) {
       mid = [a, b]
     } else {
@@ -367,9 +481,41 @@ export function setHover(hit, graph) {
 
 // Inside the gate's top edge -- floating above it would put a hover dead-zone
 // between body and glyph and the hover would clear on the way up.
-export function glyphRect(gate, n) {
+// Hover control column (Barney's design): the caret yields its spot while
+// hovered and up to three 12px glyphs stack vertically centred on the gate --
+// they JUST fit a two-lane gate. Slot 0 flip, slot 1 labels, slot 2 reserved
+// for sort. Hover out: glyphs gone, caret back.
+function ctrlSlot(gate, n, slot) {
   const g = gateGeom(gate, n)
-  return [g.rect[0] + g.rect[2] / 2 - 6, g.rect[1] + 3, 12, 12]
+  // Four-slot grid centred on the gate: flip, labels, sort, collapse. The
+  // 3-lane minimum height exists exactly so this fits.
+  const cy = g.centerY + (slot - 1.5) * 14
+  return [ctrlCx(gate, g) - 6, cy - 6, 12, 12]
+}
+
+export function glyphRect(gate, n) {
+  return ctrlSlot(gate, n, 0)
+}
+
+// Labels toggle glyph: middle slot of the hover column.
+export function labelsGlyphRect(gate, n) {
+  return ctrlSlot(gate, n, 1)
+}
+
+// Sort glyph: third slot; opens the lane-sort modal (order applies comb-wide).
+export function sortGlyphRect(gate, n) {
+  return ctrlSlot(gate, n, 2)
+}
+
+// Collapse glyph: fourth slot (per-comb toggle, mirrored on both gates).
+export function collapseGlyphRect(gate, n) {
+  return ctrlSlot(gate, n, 3)
+}
+
+// The one control a collapsed gate offers: expand, centred on the square.
+export function expandGlyphRect(gate, n) {
+  const g = gateGeom(gate, n)
+  return [ctrlCx(gate, g) - 6, g.centerY - 6, 12, 12]
 }
 
 // Hit-test a graph point against every gate. zone: 'flip' (hover glyph), 'body'
@@ -379,7 +525,10 @@ export function glyphRect(gate, n) {
 // pin", so lane creation gets its own explicit, visible target).
 export function plusRect(gate, n) {
   const g = gateGeom(gate, n)
-  return [g.rect[0], g.rect[1] + g.rect[3] + 4, GATE_W, GATE_W]
+  // Anchored to the PIN side: a labels-expanded gate bulges toward the ribbon,
+  // and the drop square must not wander with it.
+  const x0 = gate.pins === 'left' ? g.rect[0] : g.rect[0] + g.rect[2] - GATE_W
+  return [x0, g.rect[1] + g.rect[3] + 4, GATE_W, GATE_W]
 }
 
 // True while a free reroute dot rides a core drag (combgestures maintains it);
@@ -399,11 +548,40 @@ export function combAt(graph, x, y) {
       if (x >= pr[0] && x <= pr[0] + pr[2] && y >= pr[1] && y <= pr[1] + pr[3]) {
         return { comb, which, zone: 'newlane' }
       }
+      // Collapsed comb: implicit linking only -- the square is all body except
+      // the centred expand glyph (hover) and the "+" square handled above.
+      if (comb.collapsed) {
+        const eg = expandGlyphRect(comb[which], n)
+        if (
+          hover?.id === comb.id && hover.which === which &&
+          x >= eg[0] && x <= eg[0] + eg[2] && y >= eg[1] && y <= eg[1] + eg[3]
+        ) return { comb, which, zone: 'expand' }
+        const [rx, ry, rw, rh] = gateGeom(comb[which], n).rect
+        if (x < rx || x > rx + rw || y < ry || y > ry + rh) continue
+        return { comb, which, zone: 'body' }
+      }
       const gl = glyphRect(comb[which], n)
       if (
         hover?.id === comb.id && hover.which === which &&
         x >= gl[0] && x <= gl[0] + gl[2] && y >= gl[1] && y <= gl[1] + gl[3]
       ) return { comb, which, zone: 'flip' }
+      {
+        const lg = labelsGlyphRect(comb[which], n)
+        if (
+          hover?.id === comb.id && hover.which === which &&
+          x >= lg[0] && x <= lg[0] + lg[2] && y >= lg[1] && y <= lg[1] + lg[3]
+        ) return { comb, which, zone: 'labels' }
+        const sg = sortGlyphRect(comb[which], n)
+        if (
+          hover?.id === comb.id && hover.which === which &&
+          x >= sg[0] && x <= sg[0] + sg[2] && y >= sg[1] && y <= sg[1] + sg[3]
+        ) return { comb, which, zone: 'sort' }
+        const cg = collapseGlyphRect(comb[which], n)
+        if (
+          hover?.id === comb.id && hover.which === which &&
+          x >= cg[0] && x <= cg[0] + cg[2] && y >= cg[1] && y <= cg[1] + cg[3]
+        ) return { comb, which, zone: 'collapse' }
+      }
       const [rx, ry, rw, rh] = gateGeom(comb[which], n).rect
       if (x < rx || x > rx + rw || y < ry || y > ry + rh) continue
       const strip = comb[which].pins === 'left' ? x <= rx + 10 : x >= rx + rw - 10
@@ -790,21 +968,45 @@ function drawGate(ctx, graph, comb, which, sel, canvas) {
     ctx.stroke()
   })
   ctx.globalAlpha = 1
-  // Flow caret (polish round): the IN gate points pins->ribbon, the OUT gate
-  // ribbon->pins -- both read as travel direction, so a comb scans source-to-sink
-  // at a glance and the two gates are tellable apart.
-  const dir = which === 'in' ? g.ribbonDir : g.pinDir
-  const cx = g.rect[0] + g.rect[2] / 2
-  const dx = dir === 'right' ? 3 : -3
-  ctx.strokeStyle = L?.NODE_TITLE_COLOR ?? '#999'
-  ctx.lineWidth = 1.5
-  ctx.beginPath()
-  ctx.moveTo(cx - dx, g.centerY - 4)
-  ctx.lineTo(cx + dx, g.centerY)
-  ctx.lineTo(cx - dx, g.centerY + 4)
-  ctx.stroke()
-  if (hover?.id === comb.id && hover.which === which) {
-    // flip glyph: paired chevrons above the gate (no text, path only)
+  // Lane labels (either gate, toggled): source names printed per pin row inside
+  // the bulged body, anchored at the pin side and running toward the ribbon.
+  const lgate = comb[which]
+  if (lgate.labels && lgate._labelList) {
+    ctx.font = LABEL_FONT
+    ctx.fillStyle = L?.NODE_TEXT_COLOR ?? '#ddd'
+    ctx.textBaseline = 'middle'
+    ctx.textAlign = lgate.pins === 'right' ? 'right' : 'left'
+    const tx = lgate.pins === 'right' ? g.pinX - LABEL_PAD : g.pinX + LABEL_PAD
+    lgate._labelList.forEach((t, i) => ctx.fillText(t, tx, g.pinY(i)))
+  }
+  const hovered = hover?.id === comb.id && hover.which === which
+  if (!hovered) {
+    // Flow caret: INFORMATION, not interaction -- a filled ◀/▶ in semitransparent
+    // black. IN gate points pins->ribbon, OUT gate ribbon->pins, so a comb scans
+    // source-to-sink at a glance. Shown only while the control column is hidden.
+    const dir = which === 'in' ? g.ribbonDir : g.pinDir
+    const cx = ctrlCx(comb[which], g)
+    const dx = dir === 'right' ? 4 : -4
+    ctx.fillStyle = 'rgba(0,0,0,0.45)'
+    ctx.beginPath()
+    ctx.moveTo(cx - dx, g.centerY - 5)
+    ctx.lineTo(cx + dx, g.centerY)
+    ctx.lineTo(cx - dx, g.centerY + 5)
+    ctx.closePath()
+    ctx.fill()
+  } else if (comb.collapsed) {
+    // Collapsed square offers ONE control: expand (outward chevrons).
+    const [ex, ey, ew, eh] = expandGlyphRect(comb[which], n)
+    const ecx = ex + ew / 2
+    ctx.strokeStyle = L?.NODE_TITLE_COLOR ?? '#999'
+    ctx.lineWidth = 1.5
+    ctx.beginPath()
+    ctx.moveTo(ecx - 4, ey + 5); ctx.lineTo(ecx, ey + 1); ctx.lineTo(ecx + 4, ey + 5)
+    ctx.moveTo(ecx - 4, ey + eh - 5); ctx.lineTo(ecx, ey + eh - 1); ctx.lineTo(ecx + 4, ey + eh - 5)
+    ctx.stroke()
+  } else {
+    // Hover control column in the caret's place (Barney's design): flip,
+    // labels, sort, collapse -- four 12px glyphs on the min-height gate.
     const [gx, gy, gw, gh] = glyphRect(comb[which], n)
     const cy = gy + gh / 2
     ctx.strokeStyle = L?.NODE_TITLE_COLOR ?? '#999'
@@ -813,6 +1015,30 @@ function drawGate(ctx, graph, comb, which, sel, canvas) {
     ctx.moveTo(gx + 5, cy - 4); ctx.lineTo(gx + 1, cy); ctx.lineTo(gx + 5, cy + 4)
     ctx.moveTo(gx + gw - 5, cy - 4); ctx.lineTo(gx + gw - 1, cy); ctx.lineTo(gx + gw - 5, cy + 4)
     ctx.stroke()
+    {
+      const [lx, ly, lw, lh] = labelsGlyphRect(comb[which], n)
+      ctx.beginPath()
+      for (let k = 0; k < 3; k++) {
+        const yy = ly + 3 + k * (lh - 6) / 2
+        ctx.moveTo(lx + 2, yy); ctx.lineTo(lx + lw - 2, yy)
+      }
+      ctx.stroke()
+      // sort: descending bars
+      const [sx, sy, sw, sh] = sortGlyphRect(comb[which], n)
+      ctx.beginPath()
+      for (let k = 0; k < 3; k++) {
+        const yy = sy + 3 + k * (sh - 6) / 2
+        ctx.moveTo(sx + 2, yy); ctx.lineTo(sx + 2 + (sw - 4) * (1 - k * 0.3), yy)
+      }
+      ctx.stroke()
+      // collapse: inward chevrons
+      const [cx2, cy2, cw2, ch2] = collapseGlyphRect(comb[which], n)
+      const ccx = cx2 + cw2 / 2
+      ctx.beginPath()
+      ctx.moveTo(ccx - 4, cy2 + 1); ctx.lineTo(ccx, cy2 + 5); ctx.lineTo(ccx + 4, cy2 + 1)
+      ctx.moveTo(ccx - 4, cy2 + ch2 - 1); ctx.lineTo(ccx, cy2 + ch2 - 5); ctx.lineTo(ccx + 4, cy2 + ch2 - 1)
+      ctx.stroke()
+    }
   }
 }
 
@@ -917,6 +1143,19 @@ export function installApi(app) {
       if (ok) layout(g(), comb)
       dirty()
       return ok
+    },
+    // Labels (harness + future sorting): read resolved lane names; pass `on`
+    // to set the persisted toggle programmatically. Per gate; default out.
+    labels(combId, on, which = 'out') {
+      const comb = find(combId)
+      if (!comb) return null
+      const gate = comb[which === 'in' ? 'in' : 'out']
+      if (on !== undefined) {
+        if (on) gate.labels = true
+        else delete gate.labels
+        dirty()
+      }
+      return { on: !!gate.labels, list: comb.lanes.map((l) => laneLabel(g(), l)) }
     },
     remove(combId, linkId) {
       const comb = find(combId)

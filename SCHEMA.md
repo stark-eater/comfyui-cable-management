@@ -79,6 +79,13 @@ Ribbon combs: gate-pair groupings over native reroutes ("teeth").
 
 - Teeth are ordinary graph reroutes; `lanes[i].in`/`.out` are reroute ids. A
   member link's chain always threads the in-tooth before the out-tooth.
+- `collapsed: true` (optional, additive, per-comb) -- both gates draw as
+  GATE_W squares, all pins and lanes stack on the centre, the ribbon runs as
+  a single line; implicit linking only while collapsed. Absent = expanded.
+- `in.labels` / `out.labels: true` (optional, additive) -- that gate renders
+  each lane's source label and bulges toward the ribbon side to fit; absent =
+  narrow gate. Both gates show the SOURCE names. Label text and width are
+  derived at runtime, never serialized.
 - Deleting the record (or disabling the extension) leaves the teeth as plain
   reroutes and every link connected: the ribbon decomposes, the wiring stays.
 

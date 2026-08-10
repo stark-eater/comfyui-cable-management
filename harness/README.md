@@ -148,7 +148,10 @@ Pathing suite (PCB link render mode -- see PATHING.md):
   after the round trip. NOTE: dismissing the link-release search box with Escape EXITS
   the subgraph -- sequence subgraph-dependent asserts before any Escape
 - `pathing-combgest.mjs` -- comb gestures via real mouse: reroute-on-reroute
-  create, drop-on-gate enroll, gate body drag (teeth follow), hover-glyph flip,
+  create, drop-on-"+"-square enroll (the square below each gate is the sole
+  lane-creation surface while a drag is live; gate body = connect to first
+  matching pin, join-or-nothing for dots), gate body drag (teeth follow),
+  hover-glyph flip,
   in-tooth pull detach, second-to-last pull auto-decompose
 - `pathing-combfloat.mjs` -- floating lanes: link drag parked on a gate (both
   directions), dangling lane rides the ribbon, out-pin pull resumes/branches
@@ -167,6 +170,15 @@ Pathing suite (PCB link render mode -- see PATHING.md):
   out-gate mirrors it (the router's enforced-stub + gates-as-obstacles round)
 - `pathing-combrank.mjs` -- gate pins rank like a node side: four up-benders get
   stubs 24/29/34/39 by row, no crossings at the pin side
+- `ribbonjoin.mjs` -- peel-abort (drop back on own in-gate no-ops), same-source
+  lane join (reroute enroll + carried link), gate-body first-matching-pin
+  re-source, consumer-polarity no-op
+- `gatelabels.mjs` -- lane labels: per-gate toggle, live slot renames,
+  passthrough host-input resolution, flip, serialize round-trip (transients
+  never persisted), toggle-off restores the narrow gate
+- `gatechrome.mjs` -- hover control column: sort modal (comfy dialog store,
+  drag rows, Apply reorders lanes comb-wide), per-ribbon collapse/expand
+  (stacked teeth, single-line ribbon), shift-drag grid snap, pointer cursor
 - `pathing-stress.mjs` -- PCB mode over all real workflows, zero page errors
 - `pathing-spike-patchpoints.mjs` / `pathing-spike-postpass.mjs` -- the original
   feasibility spikes (patch-point presence/counters; cull post-pass render)
