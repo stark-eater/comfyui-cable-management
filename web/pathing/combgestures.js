@@ -20,7 +20,7 @@
 // element-level listener could never preempt them.
 import {
   clearGateSelection, combAt, detachLane, dissolveComb, gestureCreate,
-  gestureEnroll, gestureJoin, isGateSelected, selectGate, selectedGates,
+  gestureEnroll, isGateSelected, selectGate, selectedGates,
   setDotDrag, setHover, toothOf
 } from './combs.js'
 // Every graph resolution here must be the graph ON SCREEN -- the root graph is not it
@@ -738,14 +738,16 @@ export function installGestures(app, active) {
         const gate = combAt(g, r.pos[0], r.pos[1])
         const other = gate ? null : rerouteNear(g, r.pos[0], r.pos[1], r)
         const otherTooth = other ? toothOf(other.id) : null
-        // Lane creation lives on the "+" square only; gate body and teeth are
-        // join-or-nothing (a same-source dot merges into its lane, anything
-        // else stays a free dot where it landed).
+        // The "+" square is the ONE special drop area (Barney's parity ruling):
+        // the gate surface -- body, pins, teeth -- matches node-body semantics
+        // for reroutes, and a dropped dot is a NO-OP that stays where it landed.
+        // Same-source absorption lives inside the "+" enroll (joinLane first),
+        // not on the body.
         if (gate) {
           if (gate.zone === 'newlane') gestureEnroll(g, gate.comb, r)
-          else gestureJoin(g, gate.comb, r)
-        } else if (otherTooth) gestureJoin(g, otherTooth.comb, r)
-        else if (other) gestureCreate(g, other, r)
+        } else if (otherTooth) {
+          // a tooth reads as a gate pin: same parity, no-op
+        } else if (other) gestureCreate(g, other, r)
         g.setDirtyCanvas(true, true)
       }))
     },

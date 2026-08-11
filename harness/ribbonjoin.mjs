@@ -1,8 +1,9 @@
 // #4 ribbon polish: (s1) peel-abort -- dragging an in-tooth and dropping it back
-// on its own in-gate no-ops (lane stays enrolled, tooth snaps home); (s2)
-// same-source reroute enrolled on a gate JOINS the existing lane (fork at the
-// ribbon output pin, no twin lane, dot gone); (s3) an existing link picked up
-// by its input end and dropped on the gate body joins the matching lane too.
+// on its own in-gate no-ops (lane stays enrolled, tooth snaps home); (s2) a dot
+// dropped on the gate SURFACE is a NO-OP (node-body parity ruling); the same
+// dot on "+" JOINS its same-source lane (fork at the ribbon output pin, no
+// twin lane, dot gone); (s3) an existing link picked up by its input end and
+// dropped on the gate body joins the matching lane too.
 import { chromium } from 'playwright'
 const b = await chromium.launch({ headless: true })
 const page = await b.newPage({ viewport: { width: 2560, height: 1300 } })
@@ -143,16 +144,40 @@ await drag(freed[0], freed[1], ...(await plusPt('in')))
 st = await combState()
 ok('re-enrolled to 3 lanes via +', st.combs[0]?.lanes === 3, JSON.stringify(st.combs))
 
-// ---- s2: same-source reroute joins --------------------------------------------
-// C's wire comes from s1 output 0 -- the same source lane 0 carries. Dropping
-// C's reroute on the gate must NOT mint lane 3: C reconnects through the lane.
+// ---- s2: dot on the gate SURFACE is a NO-OP; same-source join lives on "+" ----
+// (Barney's parity ruling 2026-08-11: reroutes dropped on a gate body behave
+// like reroutes dropped on a node body -- nothing. The "+" enroll absorbs a
+// same-source dot into its lane instead of minting a twin.)
 const s2r = await page.evaluate((cRid) => {
   const r = window.app.graph.reroutes.get(cRid)
   return r ? [r.pos[0], r.pos[1], r.id] : null
 }, cRid)
 ok('s2: free reroute present', !!s2r, JSON.stringify(s2r))
 st = await combState()
-await drag(s2r[0], s2r[1], st.combs[0].inPos[0] + 10, st.combs[0].inPos[1] + 30)
+await drag(s2r[0], s2r[1], st.combs[0].inPos[0] + 21, st.combs[0].inPos[1] + 30)
+st = await combState()
+const afterBody = await page.evaluate(({ ids, cRid }) => {
+  const g = window.app.graph
+  const cNode = g.getNodeById(ids.c) ?? g.getNodeById(Number(ids.c))
+  const lid = cNode?.inputs?.[ids.idx]?.link
+  const l = lid != null ? g._links.get(lid) : null
+  const dot = g.reroutes.get(cRid)
+  return { dotAlive: !!dot, dotPos: dot ? [dot.pos[0], dot.pos[1]] : null, parent: l?.parentId ?? null }
+}, { ids, cRid })
+ok('s2: body drop is a no-op (dot survives, C untouched)',
+  st.combs[0].lanes === 3 && afterBody.dotAlive && afterBody.parent === cRid,
+  JSON.stringify({ lanes: st.combs[0].lanes, afterBody }))
+
+// now the same dot onto the "+": joins the s1 lane, no twin. The no-op left
+// the dot UNDER the gate where the gate wins the press -- relocate it clear
+// first (move(), so the layout store follows), then gesture-drag onto "+".
+await page.evaluate((cRid) => {
+  const r = window.app.graph.reroutes.get(cRid)
+  r.move(700 - r.pos[0], 700 - r.pos[1])
+  window.app.graph.setDirtyCanvas(true, true)
+}, cRid)
+await settle()
+await drag(700, 700, ...(await plusPt('in')))
 st = await combState()
 const joined = await page.evaluate(({ c, s1, idx }) => {
   const g = window.app.graph
@@ -171,7 +196,7 @@ const joined = await page.evaluate(({ c, s1, idx }) => {
     s1Lane
   }
 }, ids)
-ok('s2: no twin lane', st.combs.length === 1 && st.combs[0].lanes === 3, JSON.stringify(st.combs))
+ok('s2: "+" drop joins, no twin lane', st.combs.length === 1 && st.combs[0].lanes === 3, JSON.stringify(st.combs))
 ok('s2: C rides the lane (fork at out pin)', !!joined.s1Lane && joined.parent === joined.s1Lane.out,
   JSON.stringify(joined))
 ok('s2: joined dot is gone', st.reroutes.length === 6, JSON.stringify(st.reroutes))

@@ -715,6 +715,16 @@ function laneWithSource(graph, comb, originId, originSlot, apparent) {
 // caller falls through to a plain enroll -- when the reroute carries floats, a
 // mixed-origin manifold, or no lane matches.
 function joinLane(graph, comb, reroute) {
+  // Phantom float ids (see mint) ride FREE dots too: core's createReroute seeds
+  // them and only the VUE draw path happens to prune (legacy never validates),
+  // so every legacy-mode join was vetoed by the guard below (battery catch:
+  // ribbonjoin s2 green under Vue, dead under legacy). Scrub against graph
+  // truth first -- a REAL parked float still refuses the join.
+  if (reroute.floatingLinkIds) {
+    for (const id of [...reroute.floatingLinkIds]) {
+      if (!graph.floatingLinks?.has?.(id)) reroute.floatingLinkIds.delete(id)
+    }
+  }
   if (reroute.floatingLinkIds?.size) return false
   const ids = [...(reroute.linkIds ?? [])]
   if (!ids.length) return false
@@ -759,20 +769,6 @@ export function gestureCreate(graph, target, dragged) {
   absorb(graph, comb, dragged)
   layout(graph, comb)
   return id
-}
-
-// Join-or-nothing: a dot released on a gate BODY (or a tooth) merges into a
-// same-source lane when one exists and otherwise does nothing -- only the "+"
-// square creates lanes.
-export function gestureJoin(graph, comb, reroute) {
-  if (toothIndex.has(reroute.id)) return false
-  for (const l of comb.lanes) {
-    const t = graph.reroutes.get(l.in)
-    if (t && sharesLink(t, reroute)) return false
-  }
-  if (!joinLane(graph, comb, reroute)) return false
-  layout(graph, comb)
-  return true
 }
 
 // First lane whose carried type matches a drag's type -- the gate-body "connect
