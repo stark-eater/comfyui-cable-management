@@ -10,6 +10,8 @@
 //                                          semantics: branch a complete lane,
 //                                          resume a dangling one; never moves)
 //   gate body dragged                   -> gate moves (teeth follow via combPass)
+//   group title dragged                 -> gates inside the group rect ride the
+//                                          drag (core already carries the teeth)
 //   hover glyph clicked                 -> gate flips horizontally
 // Core does all reroute dragging; we only observe presses and interpret drops --
 // except the out-pull, which we start (dragFromReroute) and finish (dropLinks +
@@ -19,9 +21,9 @@
 // canvas element, and same-target capture runs in registration order, so an
 // element-level listener could never preempt them.
 import {
-  clearGateSelection, combAt, detachLane, dissolveComb, gestureCreate,
-  gestureEnroll, isGateSelected, selectGate, selectedGates,
-  setDotDrag, setHover, toothOf
+  clearGateSelection, combAt, combRecords, detachLane, dissolveComb,
+  gestureCreate, gestureEnroll, isGateSelected, selectGate,
+  selectedGates, setDotDrag, setHover, toothOf
 } from './combs.js'
 // Every graph resolution here must be the graph ON SCREEN -- the root graph is not it
 // inside a subgraph, which made all comb gestures dead there and let presses hit-test
@@ -105,6 +107,50 @@ export function installGestures(app, active) {
   // selected NODE arms this; deltas are read off that node's own pos, which works
   // for both the legacy canvas drag and the Vue node drag.
   let follow = null // {refNode, refPos, gates: [{comb, which, origin}]}
+
+  // LGraphGroups among core's selected items (duck-typed: only groups carry
+  // recomputeInsideNodes). A drag that moves a group moves everything the group
+  // captured -- teeth included, they are ordinary reroutes -- so the gates the
+  // group holds must ride the same drag, or combPass snaps the teeth straight
+  // back onto the stranded gates (measured: ribbons refused to move with their
+  // group).
+  const selectedGroups = () =>
+    [...(app.canvas?.selectedItems ?? [])].filter(
+      (it) => typeof it?.recomputeInsideNodes === 'function'
+    )
+
+  // Arm the follow for a drag core is about to run: refItem's pos carries the
+  // per-frame delta (nodes and groups both expose pos). Riders: the selected
+  // gates (marquee semantics, as before), plus the gates every dragged GROUP
+  // captures -- gate anchor point-in-rect, the same rule core's
+  // recomputeInsideNodes applies to reroutes. Callers pass groups: [] on
+  // ctrl/meta drags, mirroring core's getDraggedItems (a group frame dragged
+  // WITHOUT its children must leave its gates behind too).
+  const armFollow = (g, refItem, groups, withSelected) => {
+    const gates = []
+    const seen = new Set()
+    const ride = (comb, which) => {
+      const k = `${comb.id}|${which}`
+      if (seen.has(k)) return
+      seen.add(k)
+      gates.push({ comb, which, origin: [...comb[which].pos] })
+    }
+    if (withSelected) for (const s of selectedGates(g)) ride(s.comb, s.which)
+    for (const grp of groups) {
+      const b = grp.boundingRect ?? [grp.pos[0], grp.pos[1], grp.size[0], grp.size[1]]
+      for (const comb of combRecords(g)) {
+        for (const which of ['in', 'out']) {
+          const p = comb[which].pos
+          if (p[0] >= b[0] && p[0] <= b[0] + b[2] && p[1] >= b[1] && p[1] <= b[1] + b[3]) {
+            ride(comb, which)
+          }
+        }
+      }
+    }
+    follow = gates.length
+      ? { refNode: refItem, refPos: [refItem.pos[0], refItem.pos[1]], gates }
+      : null
+  }
   let cursorSet = false // we own the canvas cursor only while over a glyph
 
   const graphPt = (e) => {
@@ -214,12 +260,7 @@ export function installGestures(app, active) {
             )
           : null
         if (refNode) {
-          follow = {
-            refNode,
-            refPos: [refNode.pos[0], refNode.pos[1]],
-            gates: selectedGates(g).map((s) => ({ ...s, origin: [...s.comb[s.which].pos] }))
-          }
-          if (!follow.gates.length) follow = null
+          armFollow(g, refNode, e.ctrlKey || e.metaKey ? [] : selectedGroups(), true)
         } else if (!e.shiftKey) {
           clearGateSelection()
           g?.setDirtyCanvas(true, true)
@@ -300,12 +341,7 @@ export function installGestures(app, active) {
       if (nodeHit) {
         const refNode = [...(canvas?.selectedItems ?? [])].find((it) => it === nodeHit)
         if (refNode) {
-          follow = {
-            refNode,
-            refPos: [refNode.pos[0], refNode.pos[1]],
-            gates: selectedGates(g).map((s) => ({ ...s, origin: [...s.comb[s.which].pos] }))
-          }
-          if (!follow.gates.length) follow = null
+          armFollow(g, refNode, e.ctrlKey || e.metaKey ? [] : selectedGroups(), true)
         } else if (!e.shiftKey) {
           clearGateSelection()
           g?.setDirtyCanvas(true, true)
@@ -313,11 +349,36 @@ export function installGestures(app, active) {
         return
       }
 
+      const r = rerouteNear(g, x, y)
+
+      // GROUP-TITLE press (guarded on !r: a press that also lands on a tooth is
+      // a tooth gesture, and an armed follow would swallow its pointerup drop
+      // resolution below). Core is about to drag the group and everything
+      // recomputeInsideNodes captured; the gates live in graph.extra and know
+      // nothing of groups, so the ribbon stayed behind while its teeth were
+      // dragged and snapped back. Arm the same follow node drags use, with the
+      // GROUP as the reference positionable -- only its pos is read, and a
+      // resize-corner press never changes pos (zero delta, harmless).
+      if (!r) {
+        const grp = [...(g?.groups ?? [])].find((gr) => gr.isPointInTitlebar?.(x, y))
+        if (grp) {
+          // Core keeps the selection when the pressed group is already in it
+          // (shift adds it), and the whole selection rides the drag; an
+          // unselected plain press replaces the selection at drag start, so
+          // the gate selection clears with it (node semantics).
+          const rides = app.canvas?.selectedItems?.has?.(grp) || e.shiftKey
+          if (!rides) clearGateSelection()
+          const dragged = rides ? [grp, ...selectedGroups()] : [grp]
+          armFollow(g, grp, e.ctrlKey || e.metaKey ? [] : dragged, rides)
+          g?.setDirtyCanvas(true, true)
+          return
+        }
+      }
+
       // Empty canvas / pins / free reroutes: clear gate selection (a marquee will
       // re-select through the teeth proxies).
       if (!e.shiftKey) clearGateSelection()
 
-      const r = rerouteNear(g, x, y)
       if (r) {
         const t = toothOf(r.id)
         if (t?.side === 'out') {
