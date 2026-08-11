@@ -26,7 +26,7 @@ await page.waitForTimeout(3500)
 phase = 'scene'
 const ids = await page.evaluate(async () => {
   const g = window.app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const CK = L.createNode('CheckpointLoaderSimple'); CK.pos = [80, 120]; g.add(CK)
   const A = L.createNode('CLIPTextEncode'); A.pos = [520, 120]; A.title = 'A'; g.add(A)
   const B = L.createNode('CLIPTextEncode'); B.pos = [520, 420]; B.title = 'B'; g.add(B)

@@ -20,7 +20,7 @@ await page.waitForTimeout(2500)
 // Loader -> KSampler(model), KSampler converted to a subgraph: its MODEL input is
 // gate-fed inside, so its pass-through pin's origin is the input panel.
 const ids = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const CK = L.createNode('CheckpointLoaderSimple'); CK.pos = [80, 200]; g.add(CK)
   const K = L.createNode('KSampler'); K.pos = [700, 200]; g.add(K)
   CK.connect(0, K, K.inputs.findIndex(s => s.type === 'MODEL'))

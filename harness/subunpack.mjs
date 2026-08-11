@@ -43,7 +43,7 @@ const dotPos = (id, idx) => page.evaluate(({ id, idx }) => {
 // Build the widget chain by gesture: A.text literal; A' -> B; B' -> C.
 async function buildWidgetChain() {
   const ids = await page.evaluate(async () => {
-    const g = window.app.graph, L = window.LiteGraph; g.clear()
+    const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
     const A = L.createNode('CLIPTextEncode'); A.pos = [440, 80]; A.title = 'A'; g.add(A)
     const B = L.createNode('CLIPTextEncode'); B.pos = [980, 80]; B.title = 'B'; g.add(B)
     const C = L.createNode('CLIPTextEncode'); C.pos = [980, 500]; C.title = 'C'; g.add(C)
@@ -128,7 +128,7 @@ ok('U: value still delivered', u.cValue === 'chain value', `cValue=${JSON.string
 
 // ---- (L) link chain ----
 const lids = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const CK = L.createNode('CheckpointLoaderSimple'); CK.pos = [30, 60]; g.add(CK)
   const A = L.createNode('CLIPTextEncode'); A.pos = [440, 80]; A.title = 'A'; g.add(A)
   const B = L.createNode('CLIPTextEncode'); B.pos = [980, 80]; B.title = 'B'; g.add(B)
@@ -148,7 +148,7 @@ ok('L: no ledger error', !l.ledgerErr, String(l.ledgerErr))
 
 // ---- (K) comb inside a subgraph survives the unpack ----
 const k = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const CK = L.createNode('CheckpointLoaderSimple'); CK.pos = [60, 200]; g.add(CK)
   const A = L.createNode('CLIPTextEncode'); A.pos = [900, 80]; A.title = 'A'; g.add(A)
   const B = L.createNode('CLIPTextEncode'); B.pos = [900, 460]; B.title = 'B'; g.add(B)

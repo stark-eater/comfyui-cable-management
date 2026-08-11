@@ -79,7 +79,7 @@ const ghosts = () => page.evaluate(async () => {
 
 // ================= INPUT flavour =================
 const li = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const A = L.createNode('EmptyLatentImage'); A.pos = [150, 150]; A.title = 'A'; g.add(A)
   const A2 = L.createNode('EmptyLatentImage'); A2.pos = [150, 700]; A2.title = 'A2'; g.add(A2)
   const mk = (t, x, y) => { const n = L.createNode('KSampler'); n.pos = [x, y]; n.title = t; g.add(n); return n }
@@ -164,7 +164,7 @@ ok('I-swap: D re-sources to A2 (route delivers whatever its head is fed)',
 
 // ================= WIDGET flavour =================
 const w = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const mk = (t, x, y) => { const n = L.createNode('CLIPTextEncode'); n.pos = [x, y]; n.title = t; g.add(n); return n }
   const A = mk('A', 200, 80), B = mk('B', 850, 80), C = mk('C', 850, 500), D = mk('D', 850, 880)
   A.widgets.find((x) => x.name === 'text').value = 'v1'
@@ -209,7 +209,7 @@ ok('W-swap: B\'s consumerless primitive reaped', bPrimGone)
 // record remembers the chain's tail. Re-feeding B re-threads a real link
 // through the same chain; swapping B's feed keeps the chain too.
 const rr = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const A = L.createNode('EmptyLatentImage'); A.pos = [150, 150]; A.title = 'A'; g.add(A)
   const A2 = L.createNode('EmptyLatentImage'); A2.pos = [150, 700]; A2.title = 'A2'; g.add(A2)
   const mk = (t, x, y) => { const n = L.createNode('KSampler'); n.pos = [x, y]; n.title = t; g.add(n); return n }
@@ -286,7 +286,7 @@ ok('R-swap: C re-sources to A2, wire still threads the reroute',
 // Same contract with a comb: cut B's feed -> both riders sever, lanes park as
 // dangling floats on their teeth; re-feed -> real links re-thread the lanes.
 const cb = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const A = L.createNode('EmptyLatentImage'); A.pos = [150, 150]; A.title = 'A'; g.add(A)
   const mk = (t, x, y) => { const n = L.createNode('KSampler'); n.pos = [x, y]; n.title = t; g.add(n); return n }
   const B = mk('B', 640, 100), C = mk('C', 1400, 120), C2 = mk('C2', 1400, 560)

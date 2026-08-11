@@ -16,7 +16,7 @@ const out = await page.evaluate(async () => {
   const L = window.LiteGraph
   const r = { probe: window.__cablemanagementPathing.state }
 
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   // Backward pair: B sits LEFT of A, A.CLIP -> B.clip
   const A = L.createNode('CheckpointLoaderSimple'); A.pos = [700, 150]; A.title = 'A'; g.add(A)
   const B = L.createNode('CLIPTextEncode'); B.pos = [200, 180]; B.title = 'B'; g.add(B)
@@ -66,7 +66,7 @@ const out2 = await page.evaluate(async () => {
   const app = window.app
   const g = app.graph
   const L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const mk = (t, x, y) => { const n = L.createNode('CLIPTextEncode'); n.pos = [x, y]; n.title = t; g.add(n); return n }
   const ck = L.createNode('CheckpointLoaderSimple'); ck.pos = [150, 100]; g.add(ck)
   const n1 = mk('S1', 600, 120)

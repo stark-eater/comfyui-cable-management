@@ -45,7 +45,7 @@ const ok = (label, cond, extra = '') => {
 const ids = await page.evaluate(async () => {
   const app = window.app, g = app.graph, L = window.LiteGraph
   window.__preClearId = String(g.id) // the uuid the workflow layer re-stamps post-clear
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   const A = mk('CheckpointLoaderSimple', 80, 100)

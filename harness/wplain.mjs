@@ -11,7 +11,7 @@ await page.goto(process.env.COMFY_URL ?? 'http://127.0.0.1:8187', { waitUntil: '
 await page.waitForFunction(() => window.app && window.app.graph, null, { timeout: 120_000 })
 await page.waitForTimeout(3000)
 const ids = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const A = L.createNode('CLIPTextEncode'); A.pos = [140, 120]; A.title = 'A'; g.add(A)
   const S = L.createNode('ShowText|pysssss')
   const P = L.createNode('PreviewAny')

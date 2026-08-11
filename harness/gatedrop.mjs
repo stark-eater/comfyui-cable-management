@@ -54,7 +54,7 @@ const gatePoint = (laneIndex, where) => page.evaluate(({ laneIndex, where }) => 
 }, { laneIndex, where })
 
 const ids = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const A = L.createNode('EmptyLatentImage'); A.pos = [150, 120]; A.title = 'A'; g.add(A)
   const A2 = L.createNode('EmptyLatentImage'); A2.pos = [150, 760]; A2.title = 'A2'; g.add(A2)
   const mk = (t, x, y) => { const n = L.createNode('KSampler'); n.pos = [x, y]; n.title = t; g.add(n); return n }

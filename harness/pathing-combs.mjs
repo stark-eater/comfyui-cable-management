@@ -43,7 +43,7 @@ const out = await page.evaluate(async () => {
       return { link: Number(r.key.split('|')[0]), laneY: best, pts: r.pts }
     })
 
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = P.PCB()
   const report = {}
 
@@ -141,7 +141,7 @@ const out = await page.evaluate(async () => {
       Math.max(c.in.pos[0], c.out.pos[0]) + 24, Math.max(c.in.pos[1], c.out.pos[1]) + h
     ]
   }
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = P.PCB()
   const s7a = mk('CheckpointLoaderSimple', 100, 100)
   const t7a = mk('CheckpointSave', 1500, 120)

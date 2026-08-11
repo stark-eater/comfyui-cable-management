@@ -49,7 +49,7 @@ const screenOfSlot = (key) => page.evaluate((key) => {
 // reroute (for the core pull), and target T whose model input stays free.
 const ids = await page.evaluate(async () => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   const s1 = mk('CheckpointLoaderSimple', 60, 60)

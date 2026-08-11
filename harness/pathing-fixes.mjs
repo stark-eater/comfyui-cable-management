@@ -34,7 +34,7 @@ const braid = await page.evaluate(async () => {
   const app = window.app
   const g = app.graph
   const L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const A = L.createNode('CheckpointLoaderSimple'); A.pos = [150, 120]; g.add(A)
   const B = L.createNode('CheckpointSave'); B.pos = [640, 380]; g.add(B)
   A.connect(0, B, 0); A.connect(1, B, 1); A.connect(2, B, 2)

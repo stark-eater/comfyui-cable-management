@@ -41,7 +41,7 @@ const click = async (gx, gy, mods = []) => {
 
 const ids = await page.evaluate(async () => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   const s1 = mk('CheckpointLoaderSimple', 60, 60)
@@ -189,7 +189,7 @@ ok('selection moves comb to top of z-order', zorder[zorder.length - 1] === first
 // (7) delete key semantics -- fresh graph per sub-case
 const build = () => page.evaluate(async () => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   const s1 = mk('CheckpointLoaderSimple', 60, 60)

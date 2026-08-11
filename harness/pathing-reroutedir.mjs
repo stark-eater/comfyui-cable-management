@@ -18,7 +18,7 @@ await page.waitForTimeout(3000)
 const scene = (nodes, reroutePos) => page.evaluate(async ({ nodes, reroutePos }) => {
   const app = window.app, g = app.graph, L = window.LiteGraph
   const P = window.__cablemanagementPathing
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = P.PCB()
   const made = nodes.map(([type, x, y]) => { const n = L.createNode(type); n.pos = [x, y]; g.add(n); return n })
   made[0].connect(0, made[1], 0)

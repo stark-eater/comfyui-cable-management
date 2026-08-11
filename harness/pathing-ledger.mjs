@@ -12,7 +12,7 @@ await page.waitForFunction(() => window.app && window.app.graph && window.__cabl
 await page.waitForTimeout(3000)
 
 const ids = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const A = L.createNode('CLIPTextEncode'); A.pos = [140, 140]; A.title = 'A'; g.add(A)
   const B = L.createNode('CLIPTextEncode'); B.pos = [820, 480]; B.title = 'B'; g.add(B)
   A.widgets.find((w) => w.name === 'text').value = 'ledger + pathing'

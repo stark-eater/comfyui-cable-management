@@ -20,7 +20,7 @@ await page.waitForTimeout(2500)
 // A.ckpt_name widget pin -> B.ckpt_name input (direct, hops 0), then a core virtual
 // Reroute NODE is spliced into the middle: prim -> Reroute -> B (hops 1).
 const ids = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const A = L.createNode('CheckpointLoaderSimple'); A.pos = [80, 100]; g.add(A)
   const B = L.createNode('CheckpointLoaderSimple'); B.pos = [900, 100]; g.add(B)
   g.setDirtyCanvas(true, true); await new Promise(r => setTimeout(r, 1800))

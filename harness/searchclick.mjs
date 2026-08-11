@@ -27,7 +27,7 @@ async function runCase(kind) {
   await page.waitForFunction(() => window.app && window.app.graph, null, { timeout: 120_000 })
   await page.waitForTimeout(3000)
   const ids = await page.evaluate(async () => {
-    const g = window.app.graph, L = window.LiteGraph; g.clear()
+    const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
     const CK = L.createNode('CheckpointLoaderSimple'); CK.pos = [60, 60]; g.add(CK)
     const A = L.createNode('CLIPTextEncode'); A.pos = [420, 160]; A.title = 'A'; g.add(A)
     CK.connect(1, A, A.inputs.findIndex(s => s.type === 'CLIP'))

@@ -20,7 +20,7 @@ const ok = (label, cond, extra = '') => {
 
 const out = await page.evaluate(async () => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   // Blockers: walls above and below a 60px gap (rects y ..430 and 490..; the

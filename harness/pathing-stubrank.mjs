@@ -20,7 +20,7 @@ const out = await page.evaluate(async () => {
     for (let i = 0; i < 6; i++) { g.setDirtyCanvas(true, true); await new Promise((r) => setTimeout(r, 200)) }
   }
   const mk = (type, x, y) => { const n = L.createNode(type); n.pos = [x, y]; g.add(n); return n }
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = P.PCB()
   const Ld = mk('CheckpointLoaderSimple', 100, 80)
   const Pn = mk('CLIPTextEncode', 100, 280)

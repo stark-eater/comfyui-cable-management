@@ -35,7 +35,7 @@ const out = await page.evaluate(async () => {
   const app = window.app
   const g = app.graph
   const L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const ck = L.createNode('CheckpointLoaderSimple'); ck.pos = [150, 300]; g.add(ck)
   const enc = []
   for (let i = 0; i < 4; i++) {

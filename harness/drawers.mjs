@@ -10,7 +10,7 @@ await page.goto(process.env.COMFY_URL ?? 'http://127.0.0.1:8187', { waitUntil: '
 await page.waitForFunction(() => window.app && window.app.graph, null, { timeout: 120_000 })
 await page.waitForTimeout(3000)
 const ids = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const E = L.createNode('EmptyLatentImage'); E.pos = [80, 120]; g.add(E)
   const LCM = L.createNode('LatentCompositeMasked'); LCM.pos = [560, 120]; g.add(LCM)
   E.connect(0, LCM, LCM.inputs.findIndex(s => s.name === 'destination'))

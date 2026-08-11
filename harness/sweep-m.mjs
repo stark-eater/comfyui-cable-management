@@ -131,7 +131,7 @@ const dump = (tag) => page.evaluate((tag) => {
 console.log('---- scene 1: INPUT flavour, delete true origin A')
 const s1 = await page.evaluate(async () => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   const A = mk('CheckpointLoaderSimple', 80, 100)
@@ -213,7 +213,7 @@ console.log('---- scene 2: WIDGET flavour, delete host A')
 const buildWidgetScene = async () => {
   const ids = await page.evaluate(async () => {
     const app = window.app, g = app.graph, L = window.LiteGraph
-    g.clear()
+    g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
     app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
     const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
     const A = mk('CheckpointLoaderSimple', 80, 100)

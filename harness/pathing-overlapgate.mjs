@@ -27,7 +27,7 @@ const out = await page.evaluate(async () => {
 
   // Scene A: two identical stepped links far apart in x. Their long horizontal runs land
   // on the SAME lane y (same node types at the same y) with disjoint x spans.
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = P.PCB()
   const S1 = mk('Reroute', 100, 200), T1 = mk('Reroute', 420, 330)
   const S2 = mk('Reroute', 1000, 200), T2 = mk('Reroute', 1320, 330)
@@ -49,7 +49,7 @@ const out = await page.evaluate(async () => {
   // The far end sits 8px off: dead-level pins now take the flatTol spline
   // fallback (straightening rule -- jog thinner than the stroke = no route),
   // so the corridor probe needs a jog big enough to route yet still tight.
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const mA = mk('Reroute', 100, 300), mB = mk('Reroute', 900, 308)
   const mC = mk('CLIPTextEncode', 420, 700)
   mA.connect(0, mB, 0)
@@ -62,7 +62,7 @@ const out = await page.evaluate(async () => {
     const titleDelta = mC.pos[1] - clipBr[1] // how far the real box starts above pos
     band = [Math.min(startY, endY), Math.max(startY, endY)]
 
-    g.clear()
+    g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
     const A = mk('Reroute', 100, 300), B = mk('Reroute', 900, 308)
     const C = mk('CLIPTextEncode', 420, band[1] + 8 + titleDelta)
     A.connect(0, B, 0)
@@ -78,7 +78,7 @@ const out = await page.evaluate(async () => {
 
   // Scene F (straightening rule): dead-level pins -- vertical difference under
   // the stroke width -- must NOT route at all (spline fallback reads straight).
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const fA = mk('Reroute', 100, 300), fB = mk('Reroute', 900, 300)
   fA.connect(0, fB, 0)
   await settle()

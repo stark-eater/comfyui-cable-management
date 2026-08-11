@@ -68,7 +68,7 @@ const drag = async (from, to) => {
 // (A) consumer text input of C dropped on A's widget pin
 let ids = await page.evaluate(async () => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   const A = mk('CLIPTextEncode', 100, 300)
@@ -103,7 +103,7 @@ ok('widget value reaches the prompt', st.cText === 'pin drop A', JSON.stringify(
 // (B) consumer model input of C2 dropped on B2's link pin (B2 fed by A2)
 ids = await page.evaluate(async () => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   const A2 = mk('CheckpointLoaderSimple', 100, 100)
@@ -154,7 +154,7 @@ ok('source drop still rewires the host input', st.origin === dId, JSON.stringify
 // VAEDecode's samples dropped on the latent pin must feed from the TRUE ORIGIN.
 ids = await page.evaluate(async () => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   const E = mk('EmptyLatentImage', 100, 100)

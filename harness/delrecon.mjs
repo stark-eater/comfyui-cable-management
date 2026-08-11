@@ -66,7 +66,7 @@ const drawnVsPin = (nodeId, inputIdx, pinSel) => page.evaluate(async ({ nodeId, 
 
 // ---- S1: widget pass-through feeds the deleted node ----------------------------------
 const s1 = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const show = Object.keys(L.registered_node_types).find(k => /ShowText/i.test(k))
   if (!show) return { err: 'no ShowText type registered' }
   const A = L.createNode('CLIPTextEncode'); A.pos = [120, 120]; A.title = 'A'; g.add(A)
@@ -154,7 +154,7 @@ console.log('S3:', s3pass ? 'PASS' : 'FAIL')
 
 // ---- S2: input pass-through feeds the deleted node -----------------------------------
 const s2 = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const X = L.createNode('EmptyLatentImage'); X.pos = [60, 120]; X.title = 'X'; g.add(X)
   const Y = L.createNode('LatentUpscale'); Y.pos = [480, 120]; Y.title = 'Y'; g.add(Y)
   const Z = L.createNode('LatentUpscale'); Z.pos = [900, 120]; Z.title = 'Z'; g.add(Z)

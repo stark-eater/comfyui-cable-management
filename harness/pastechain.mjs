@@ -69,7 +69,7 @@ const provOf = (nodeId, idx) => page.evaluate(({ nodeId, idx }) => {
 
 // ---- build the chain -----------------------------------------------------------------
 const s = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const show = Object.keys(L.registered_node_types).find(k => /ShowText/i.test(k))
   if (!show) return { err: 'no ShowText type registered' }
   const A = L.createNode('CLIPTextEncode'); A.pos = [80, 100]; A.title = 'A'; g.add(A)

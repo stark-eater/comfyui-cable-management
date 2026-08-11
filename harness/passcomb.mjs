@@ -43,7 +43,7 @@ const dragScreen = async (from, to) => {
 
 const ids = await page.evaluate(async () => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   const A = mk('CLIPTextEncode', 100, 620); A.title = 'A'
@@ -145,7 +145,7 @@ ok('host widget value reaches the prompt', done.bText === 'combed literal', JSON
 // (5) a parked lane survives serialize/configure
 const reload = await page.evaluate(async (i) => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   const A = mk('CLIPTextEncode', 100, 620)

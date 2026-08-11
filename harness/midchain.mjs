@@ -71,7 +71,7 @@ const drawnFrom = (consumerId, idx, candidates) => page.evaluate(async ({ consum
 
 // ---- (W) widget chain, 3 hops ----
 const w = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const mk = (t, x, y) => { const n = L.createNode('CLIPTextEncode'); n.pos = [x, y]; n.title = t; g.add(n); return n }
   const A = mk('A', 200, 80), B = mk('B', 800, 80), C = mk('C', 800, 480), D = mk('D', 800, 860)
   A.widgets.find((w) => w.name === 'text').value = 'v'
@@ -123,7 +123,7 @@ ok('W: re-established -- D on C pin, back on A\'s value',
 
 // ---- (L) link chain ----
 const l = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const CK = L.createNode('CheckpointLoaderSimple'); CK.pos = [30, 60]; g.add(CK)
   const mk = (t, x, y) => { const n = L.createNode('CLIPTextEncode'); n.pos = [x, y]; n.title = t; g.add(n); return n }
   const A = mk('A', 500, 80), B = mk('B', 1050, 80), C = mk('C', 1050, 500)
@@ -162,7 +162,7 @@ ok('L: re-fed B re-materializes C off B pin', await drawnFrom(l.C, l.idx, lCands
 
 // ---- (R) rewire base case regression lock ----
 const r = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const mk = (t, x, y) => { const n = L.createNode('CLIPTextEncode'); n.pos = [x, y]; n.title = t; g.add(n); return n }
   const A = mk('A', 200, 80), B = mk('B', 800, 80), C = mk('C', 800, 500)
   A.widgets.find((w) => w.name === 'text').value = 'v'
@@ -182,7 +182,7 @@ ok('R: C now draws from B pin', await drawnFrom(r.C, r.idx, [['A', r.A, r.idx], 
 // ---- (RR) reroute along the route: the cut wire's chain parks as a dangling
 // float while the consumer re-sources to the cut node's own literal ----
 const rr = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const mk = (t, x, y) => { const n = L.createNode('CLIPTextEncode'); n.pos = [x, y]; n.title = t; g.add(n); return n }
   const A = mk('A', 200, 80), B = mk('B', 900, 80), C = mk('C', 900, 520)
   A.widgets.find((w) => w.name === 'text').value = 'v'
@@ -217,7 +217,7 @@ ok('RR: C re-sources to B\'s own literal, stays on B pin (chain parked for re-gr
 // ---- (RC) ribbon variant: the broken hop's lane survives dangling -- the
 // consumer rejoins the ribbon's out-tooth ----
 const rc = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const mk = (t, x, y) => { const n = L.createNode('CLIPTextEncode'); n.pos = [x, y]; n.title = t; g.add(n); return n }
   const A = mk('A', 200, 80), B = mk('B', 1100, 80), B2 = mk('B2', 1100, 420), C = mk('C', 1100, 800)
   A.widgets.find((w) => w.name === 'text').value = 'v'

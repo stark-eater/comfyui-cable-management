@@ -47,7 +47,7 @@ const screenOf = (gx, gy) => page.evaluate(([gx, gy]) => {
 
 // ---- (RT) route inheritance through a ribbon reconnect ----
 const rt = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const mk = (t, x, y) => { const n = L.createNode('CLIPTextEncode'); n.pos = [x, y]; n.title = t; g.add(n); return n }
   const A = mk('A', 200, 80), B = mk('B', 1100, 80), B2 = mk('B2', 1100, 420)
   A.widgets.find((w) => w.name === 'text').value = 'v'

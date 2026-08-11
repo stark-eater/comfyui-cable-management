@@ -11,7 +11,7 @@ await page.goto(process.env.COMFY_URL ?? 'http://127.0.0.1:8187', { waitUntil: '
 await page.waitForFunction(() => window.app && window.app.graph, null, { timeout: 120_000 })
 await page.waitForTimeout(3000)
 const ids = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const CK = L.createNode('CheckpointLoaderSimple'); CK.pos = [120, 120]; g.add(CK) // outputs all unconnected
   const K = L.createNode('KSampler'); K.pos = [640, 120]; g.add(K)
   g.setDirtyCanvas(true, true); await new Promise(r => setTimeout(r, 1700))

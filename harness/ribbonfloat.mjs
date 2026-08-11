@@ -18,7 +18,7 @@ await page.waitForFunction(() => window.app?.graph && window.__cablemanagement &
 await page.waitForTimeout(2600)
 
 const ids = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const A = L.createNode('EmptyLatentImage'); A.pos = [150, 120]; A.title = 'A'; g.add(A)
   const CK = L.createNode('CheckpointLoaderSimple'); CK.pos = [80, 420]; CK.title = 'CK'; g.add(CK)
   const B = L.createNode('KSampler'); B.pos = [700, 200]; B.title = 'B'; g.add(B)

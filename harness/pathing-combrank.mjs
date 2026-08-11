@@ -23,7 +23,7 @@ const out = await page.evaluate(async () => {
   const settle = async () => {
     for (let i = 0; i < 8; i++) { g.setDirtyCanvas(true, true); await new Promise((r) => setTimeout(r, 200)) }
   }
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = P.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   const A = mk('SuperEfficientLoader', 100, 80)

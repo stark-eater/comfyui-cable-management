@@ -14,7 +14,7 @@ const prep = await page.evaluate(async () => {
   const app = window.app
   const g = app.graph
   const L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const A = L.createNode('CheckpointLoaderSimple'); A.pos = [700, 150]; g.add(A)
   const B = L.createNode('CLIPTextEncode'); B.pos = [200, 180]; B.title = 'B'; g.add(B)
   A.connect(1, B, B.inputs.findIndex((s) => s.name === 'clip'))

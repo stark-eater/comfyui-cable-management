@@ -36,7 +36,7 @@ const out = await page.evaluate(async () => {
   const app = window.app
   const g = app.graph
   const L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const mkPair = (lx, ly, tx, ty) => {
     const A = L.createNode('SuperEfficientLoader'); A.pos = [lx, ly]; g.add(A)
     const B = L.createNode('RemoteController'); B.pos = [tx, ty]; g.add(B)

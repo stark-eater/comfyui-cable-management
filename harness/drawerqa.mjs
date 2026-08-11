@@ -21,7 +21,7 @@ await page.waitForFunction(() => window.app && window.app.graph, null, { timeout
 await page.waitForTimeout(3000)
 
 const ids = await page.evaluate(async () => {
-  const g = window.app.graph, L = window.LiteGraph; g.clear()
+  const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   const CK = L.createNode('CheckpointLoaderSimple'); CK.pos = [80, 80]; g.add(CK)
   const E = L.createNode('EmptyLatentImage'); E.pos = [80, 420]; g.add(E)
   const LCM = L.createNode('LatentCompositeMasked'); LCM.pos = [560, 380]; g.add(LCM)

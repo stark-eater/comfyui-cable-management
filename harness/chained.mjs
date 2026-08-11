@@ -49,7 +49,7 @@ async function scenario(kind) {
   await page.waitForFunction(() => window.app && window.app.graph, null, { timeout: 120_000 })
   await page.waitForTimeout(3000)
   const ids = await page.evaluate(async ({ kind }) => {
-    const g = window.app.graph, L = window.LiteGraph; g.clear()
+    const g = window.app.graph, L = window.LiteGraph; g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
     const out = {}
     if (kind === 'link') {
       const CK = L.createNode('CheckpointLoaderSimple'); CK.pos = [30, 60]; g.add(CK); out.O = String(CK.id)

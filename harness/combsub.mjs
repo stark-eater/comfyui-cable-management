@@ -49,7 +49,7 @@ const drag = async (fx, fy, tx, ty) => {
 // preserves inner positions, so subgraph coordinates overlap root coordinates.
 const ids = await page.evaluate(() => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   // decoy pair

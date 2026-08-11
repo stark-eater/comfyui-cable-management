@@ -103,7 +103,7 @@ const near = (a, b) => a && b && Math.abs(a[0] - b[0]) < 1 && Math.abs(a[1] - b[
 // ---- scene for (A)+(B): X->H and F->H2, convert all but F, work inside ----
 const s = await page.evaluate(async () => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   const X = mk('CheckpointLoaderSimple', 100, 100)
@@ -244,7 +244,7 @@ ok('unbridged stitch is reaped', st.gone && st.remaining === 1, JSON.stringify(s
 await boot()
 let c = await page.evaluate(() => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   const A = mk('CheckpointLoaderSimple', 100, 100)
@@ -292,7 +292,7 @@ ok('wire hangs off the subgraph node pin', near(draw.d, anchor), `drawn=${draw.d
 // ---- (D) convert a WIDGET pin host: primitive adopted, value survives ----
 c = await page.evaluate(() => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   const B2 = mk('CLIPTextEncode', 100, 300)
@@ -354,7 +354,7 @@ ok('editing the promoted widget flows LIVE to the consumer', st.editedText === '
 // (it has no prompt entry to inject into) and land the literal on the consumer.
 c = await page.evaluate(() => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   const W = mk('CLIPTextEncode', 100, 300)
@@ -401,7 +401,7 @@ ok('literal survives gate -> stitch -> gate to a forceInput consumer', st.s2Text
 // primitive must die. Built cover-first this already worked; order must not matter.
 let h = await page.evaluate(async () => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const T2 = L.createNode('CLIPTextEncode')
   T2.pos = [500, 300]
@@ -513,7 +513,7 @@ ok('the literal ships again (healed value)', st.s3Text === 'live value', JSON.st
 // widget pin, then a real link covers A's input -- consumer re-feeds from it.
 let ij = await page.evaluate(() => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   const A = mk('CLIPTextEncode', 100, 300)
@@ -574,7 +574,7 @@ ok('reverted literal ships in the prompt', st.cText === 'stale', JSON.stringify(
 // invisible node kinking a real link. Heal to a direct link, reap the stitch.
 const kc = await page.evaluate(() => {
   const app = window.app, g = app.graph, L = window.LiteGraph
-  g.clear()
+  g.clear(); { const __d = window.app.canvas.ds; __d.scale = 1; __d.offset = [20, 20] }
   app.canvas.links_render_mode = window.__cablemanagementPathing.PCB()
   const mk = (t, x, y) => { const n = L.createNode(t); n.pos = [x, y]; g.add(n); return n }
   const W = mk('CLIPTextEncode', 100, 300)
