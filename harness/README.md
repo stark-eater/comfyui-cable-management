@@ -184,6 +184,13 @@ Pathing suite (PCB link render mode -- see PATHING.md):
 - `combclip.mjs` -- clipboard survival: full-selection paste rebuilds the comb,
   partial selections synthesize floating lanes (parked / hanging), fully
   unselected lanes drop and a single survivor decomposes
+- `groupdrag.mjs` -- ribbons ride group drags (PR #4): group-title drag carries
+  gates + teeth, uninvolved groups leave them put, node drag with a selected
+  group carries that group's gates
+- `dbg-pcbdaughter.mjs` -- NOT in the battery: validation recipe for the
+  comfyui-pcb daughter pack (serve wgimco as no-op modules -- aborting wedges
+  slot sync -- inject the daughter via a route-fulfilled path, assert on the
+  initially loaded workflow by moving nodes)
 - `pathing-stress.mjs` -- PCB mode over all real workflows, zero page errors
 - `pathing-spike-patchpoints.mjs` / `pathing-spike-postpass.mjs` -- the original
   feasibility spikes (patch-point presence/counters; cull post-pass render)
