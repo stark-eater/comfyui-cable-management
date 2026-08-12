@@ -137,6 +137,12 @@ Pathing suite (PCB link render mode -- see PATHING.md):
   resolve the node at click time -- undo replaces instances while Vue reuses the DOM).
   NOTE: the shared server's change tracker holds state across suite runs -- checkpoint
   the built scene before testing undo or Ctrl+Z restores a previous suite's graph
+- `togglescope.mjs` -- what that toggle is ALLOWED to reach. It governs the Nodes 2.0
+  node features and nothing else, so with it OFF: PCB still routes plain links, a comb
+  still mints/lays out/draws/hit-tests, ribbon crossings still route, and comb records
+  still survive `_serializeItems` -- while pins and the layout class really are gone.
+  Guards the regression where `isEnabled()` had leaked into pathing.js and
+  combclipboard.js and the one setting took routing and ribbons away with it
 - `gatefloat.mjs` -- gate-origin pin drag released on empty canvas: core cannot float
   io-node links (no release menu, no reroute, silent swallow); the extension fires a
   warn toast instead, graph untouched, connector reset

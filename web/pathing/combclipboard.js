@@ -27,7 +27,6 @@
 // teeth left as plain reroutes -- same rule as [del]. Runs inside _deserializeItems
 // so the rebuilt record lands in the paste's own undo step.
 import { app } from '../../../scripts/app.js'
-import { isEnabled } from '../enabled.js'
 import { combRecords, layoutComb, mintTooth } from './combs.js'
 
 const KEY = 'cablemanagement_combs'
@@ -43,7 +42,7 @@ export function installClipboard() {
     const origSer = proto._serializeItems
     proto._serializeItems = function (items) {
       const out = origSer.call(this, items)
-      if (out && isEnabled()) {
+      if (out) {
         try {
           augment(this.graph, out)
         } catch (err) {
@@ -55,7 +54,7 @@ export function installClipboard() {
     const origDe = proto._deserializeItems
     proto._deserializeItems = function (parsed, options) {
       const results = origDe.call(this, parsed, options)
-      if (results && isEnabled()) {
+      if (results) {
         try {
           rebuild(this, parsed, options, results)
         } catch (err) {

@@ -28,17 +28,19 @@ const state = { patched: false, option: false, PCB: 3 };
 
 function active() {
   // PCB AESTHETICS only -- A* for plain links, decollision, sticking, straightening.
-  // Off must mean stock rendering even in PCB mode (master toggle), and other link
-  // modes keep their native geometry for everything that is not a ribbon.
-  return isEnabled() && app.canvas && app.canvas.links_render_mode === state.PCB;
+  // Its switch is the LINK RENDER MODE, and nothing else: the node-features toggle
+  // (cablemanagement.enabled) governs pins, drawers and the layout, never routing.
+  // Other link modes keep their native geometry for everything that is not a ribbon.
+  return app.canvas && app.canvas.links_render_mode === state.PCB;
 }
 
 function combsOn() {
   // RIBBON MACHINERY -- combPass, gates, gestures, the gate->gate trace -- runs in
   // EVERY link render mode (mixed-modes ruling: ribbons always on; the ribbon's
-  // internal run stays PCB-drawn, outer segments follow the native mode). The long
-  // game is a separate `ribbon mode` choice; this predicate is that seam.
-  return isEnabled() && app.canvas;
+  // internal run stays PCB-drawn, outer segments follow the native mode) and under
+  // EVERY setting: ribbons are what the pack is, so there is no switch that takes
+  // them away. Wanting the routing alone is what the standalone pcb pack is for.
+  return !!app.canvas;
 }
 
 function pickSentinel() {
@@ -62,7 +64,7 @@ function tryPatch() {
 
   const origDrawConnections = canvasProto.drawConnections;
   canvasProto.drawConnections = function (ctx) {
-    const on = this === app.canvas && isEnabled();
+    const on = this === app.canvas;
     // A throw escaping drawConnections leaves core's is_rendering flag stuck and the
     // canvas dead for the session -- same failure class as drawLink below. The comb
     // records are workflow data; nothing they contain may take the render loop down.
@@ -200,7 +202,7 @@ function tryDropSeams() {
       // genuinely overlap after convertToSubgraph): resolving against the root
       // minted cross-graph links that persisted on save.
       const g = activeGraph(app);
-      if (event && g && isEnabled()) {
+      if (event && g) {
         // A throw here wedges the whole interaction (no cleanup, connector stuck
         // connecting) -- degrade to the native drop instead.
         try {
@@ -246,8 +248,10 @@ function tryDropSeams() {
               return;
             }
           }
-          // Passthrough pins as drop targets (consumer drags; drops.js).
-          if (handlePinDrop(app, lc, event)) return;
+          // Passthrough pins as drop targets (consumer drags; drops.js). The ONE
+          // node feature on this seam, so the toggle is checked here rather than
+          // around the whole handler -- everything else here is ribbon machinery.
+          if (isEnabled() && handlePinDrop(app, lc, event)) return;
           // ANY reroute at the drop point, resolved from GRAPH truth. The Vue
           // drop path reads layoutStore.queryRerouteAtPoint, and two producers
           // never register there: our teeth (layout() writes pos directly) and
@@ -319,7 +323,7 @@ function tryDropSeams() {
     if (typeof lc.dropOnReroute === "function") {
       const origDropOnReroute = lc.dropOnReroute.bind(lc);
       lc.dropOnReroute = (reroute, event) => {
-        if (event && reroute && activeGraph(app) && isEnabled()) {
+        if (event && reroute && activeGraph(app)) {
           try {
             if (handleGateInDrop(app, lc, event, reroute)) return;
             // Polarity no-ops (RULING: 'there is no output-to-output drop --
@@ -384,12 +388,12 @@ function tryDropSeams() {
       Reroute.prototype.__cablemanagementOpaque = true;
       const origTargets = Reroute.prototype.findTargetInputs;
       Reroute.prototype.findTargetInputs = function (...a) {
-        if (isEnabled() && toothOf(this.id) && !ownReroute(this.id)) return [];
+        if (toothOf(this.id) && !ownReroute(this.id)) return [];
         return origTargets.apply(this, a);
       };
       const origSource = Reroute.prototype.findSourceOutput;
       Reroute.prototype.findSourceOutput = function (...a) {
-        if (isEnabled() && toothOf(this.id)?.side === "in" && !ownReroute(this.id)) return null;
+        if (toothOf(this.id)?.side === "in" && !ownReroute(this.id)) return null;
         return origSource.apply(this, a);
       };
     } else if (!Reroute) {

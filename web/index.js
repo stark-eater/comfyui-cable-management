@@ -45,10 +45,11 @@ let queued = false;
 let uninstallDrag = null;
 
 /**
- * Live master-toggle state for the other modules. The prototype/instance wraps
- * (bridge, paste, convert, stitch, pathing seams, ledger pass) install once and stay
- * installed; their BODIES consult this so "off" means stock behavior everywhere, not
- * just hidden pins. The flag lives in enabled.js (a leaf) so no module needs to
+ * Live NODE-FEATURES toggle state for the other modules. The prototype/instance wraps
+ * (bridge, paste, convert, stitch, the passthrough drop seams, ledger pass) install once
+ * and stay installed; their BODIES consult this so "off" means stock NODES -- no pins,
+ * no drawers, no layout, and no machinery left hidden. Routing and ribbons are outside
+ * its remit entirely (see enabled.js). The flag lives in enabled.js (a leaf) so no module needs to
  * import index.js for it -- an import cycle here let registerExtension run before
  * drag.js finished evaluating, and a settings store hydrated early enough fired
  * start() into the half-evaluated module (boot TDZ crashes, partial installs).
