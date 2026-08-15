@@ -1,4 +1,4 @@
-# Cable Management for ComfyUI
+# Cable Management for ComfyUI works with nodes before "nodes v2.0"
 
 ComfyUI has spaghetti issues. This frontend extension offers daisy-chaining, PCB
 routing, ribbon cables, and proper right-to-left wrapping support.
